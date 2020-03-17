@@ -1,0 +1,43 @@
+name:                minic
+version:             0.1.0.0
+github:              "jeanpehk/minic"
+license:             MIT
+author:              "Jere Pehkonen"
+maintainer:          "jere.a.pehkonen@student.jyu.fi"
+copyright:           "MIT"
+
+extra-source-files:
+- README.md
+
+# synopsis:            Compiler for as subset of C that compiles to LLVM.
+# category:            Compilers
+
+description:         Please see the README on GitHub at <https://github.com/jeanpehk/minic#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+
+library:
+  source-dirs: src
+
+executables:
+  minic-exe:
+    main:                Main.hs
+    source-dirs:         src
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - minic
+
+tests:
+  minic-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - minic

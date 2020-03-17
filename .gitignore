@@ -1,0 +1,6 @@
+.stack-work/
+*~
+*.swp
+*.swo
+stack.yaml.lock
+
