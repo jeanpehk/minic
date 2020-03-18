@@ -25,22 +25,22 @@ data Param
 
 data Stmt
   = BlockStmt Block
-  | ExprStmt Expr
+  | ExprStmt Id Expr
   | IfThen Expr Stmt Stmt
   | While Expr Stmt
+  | Null
   deriving (Eq, Show)
 
 data Expr
   = Var Id
   | IntConst Int
-  | Expr :+: Expr
-  | Expr :-: Expr
-  | Expr :*: Expr
-  | Expr :/: Expr
-  | Expr :>: Expr
-  | Expr :<: Expr
-  | Expr :==: Expr
-  | Expr :=: Expr
+  | Add Expr Expr
+  | Subtr Expr Expr
+  | Mul Expr Expr
+  | Div Expr Expr
+  | Lt Expr Expr
+  | Gt Expr Expr
+  | Eq Expr Expr
   deriving (Eq, Show)
 
 data Type

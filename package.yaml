@@ -16,6 +16,9 @@ description:         Please see the README on GitHub at <https://github.com/jean
 
 dependencies:
 - base >= 4.7 && < 5
+- megaparsec
+- parser-combinators
+- text
 
 library:
   source-dirs: src
