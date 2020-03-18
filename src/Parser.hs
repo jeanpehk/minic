@@ -15,9 +15,6 @@ import qualified Text.Megaparsec.Char.Lexer as L
 
 type Parser = Parsec Void String
 
-ichars = ['a'..'z'] ++ ['A'..'Z'] ++ ['_']
-digits = ['0'..'9']
-
 -- keywords reserved by the language
 keywords = ["auto", "break", "case", "char", "const", "continue", "default"
             , "do", "double", "else", "enum", "extern", "float", "for"
@@ -37,6 +34,8 @@ lexeme = L.lexeme skip
 -- Match given string
 symbol :: String -> Parser String
 symbol = L.symbol skip
+
+-- Match single char
 
 int :: Parser Int
 int = lexeme L.decimal
@@ -71,12 +70,17 @@ operatorTable =
     , binary "-" Subtr],
     [ binary "<" Lt
     , binary ">" Gt
-    , binary "==" Eq]
+    , binary "==" Eq
+    , assign "=" Assign]
   ]
 
 -- Helper to write binops for op table
 binary :: String -> (Expr -> Expr -> Expr) -> Operator Parser Expr
 binary op f = InfixL $ f <$ symbol op
+
+-- Helper to write assign stmt for op table
+assign :: String -> (Expr -> Expr -> Expr) -> Operator Parser Expr
+assign op f = InfixR $ f <$ symbol op
 
 -- Parses an expression using Megaparsec's `makeExprParser`,
 -- parseTerm and operatorTable
@@ -92,12 +96,23 @@ tpe :: Parser Type
 tpe =  CInt  <$ chunk "int"
    <|> CVoid <$ chunk "void"
 
+-- A single starting char for an identifier, i.e "a-zA-Z_"
+idStart :: Parser Char
+idStart = lexeme lowerChar
+     <|>  lexeme upperChar
+     <|>  lexeme (char '_')
+
+-- A single id char that does not need to start the id, i.e "a-zA-Z_0-9"
+idRest :: Parser Char
+idRest =  idStart
+      <|> lexeme digitChar
+
 -- Parses an identifier
 -- Also needs to check that it is not a reserved keyword
 identifier :: Parser Id
 identifier = (lexeme . try) (lxm >>= check)
     where
-     lxm = ((:) <$> ((oneOf ichars)) <*> (many (oneOf digits <|> oneOf ichars)))
+     lxm = ((:) <$> idStart <*> many idRest)
      check x =
       if x `elem` keywords
       then fail $ show x ++ " is a keyword, not an identifier"

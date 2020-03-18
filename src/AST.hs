@@ -25,10 +25,8 @@ data Param
 
 data Stmt
   = BlockStmt Block
-  | ExprStmt Id Expr
   | IfThen Expr Stmt Stmt
   | While Expr Stmt
-  | Null
   deriving (Eq, Show)
 
 data Expr
@@ -41,6 +39,7 @@ data Expr
   | Lt Expr Expr
   | Gt Expr Expr
   | Eq Expr Expr
+  | Assign Expr Expr
   deriving (Eq, Show)
 
 data Type
