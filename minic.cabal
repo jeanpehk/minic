@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: c992fcdba9523ce29286e8142e43229fd5212f414d9f0d17103dc3a41798214b
+-- hash: 9b5c36129373f30ae99b6c5c368f7dc1d96de7a47be45176591755f715be0e52
 
 name:           minic
 version:        0.1.0.0
@@ -61,12 +61,15 @@ test-suite minic-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      ParserSpec
       Paths_minic
   hs-source-dirs:
       test
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
+    , hspec
+    , hspec-megaparsec
     , megaparsec
     , minic
     , parser-combinators

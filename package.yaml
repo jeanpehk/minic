@@ -44,3 +44,5 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - minic
+    - hspec
+    - hspec-megaparsec

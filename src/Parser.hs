@@ -93,8 +93,8 @@ tunit = undefined
 
 -- Parser for types
 tpe :: Parser Type
-tpe =  CInt  <$ chunk "int"
-   <|> CVoid <$ chunk "void"
+tpe =  CInt  <$ lexeme (chunk "int")
+   <|> CVoid <$ lexeme (chunk "void")
 
 -- A single starting char for an identifier, i.e "a-zA-Z_"
 idStart :: Parser Char
