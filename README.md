@@ -1,6 +1,6 @@
 # minic
 
-Compiler for a subset of the C programming language that outputs LLVM. Written in Haskell.
+Compiler for a small subset of the C programming language that uses LLVM IR. Written in Haskell.
 
 ## Features
 
@@ -14,4 +14,3 @@ Compiler for a subset of the C programming language that outputs LLVM. Written i
 * types: int, void
 
 After these are done, I will add what I find is interesting and / or worth learning.
-
