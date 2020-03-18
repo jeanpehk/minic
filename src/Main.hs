@@ -1,6 +1,8 @@
 module Main where
 
-import Lib
+import Parser
+import AST
 
 main :: IO ()
-main = someFunc
+main = putStrLn "todo"
+

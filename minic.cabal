@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: d1ace7512bf2d711b696e56b05aa2bf75fd1c4dad4d7b84edec1c5e23b034762
+-- hash: 65b60f1687169706dcc32d6c72c5a57201f1605b2453d54c2a9d78c6b9b1b01d
 
 name:           minic
 version:        0.1.0.0
@@ -26,8 +26,9 @@ source-repository head
 
 library
   exposed-modules:
-      Lib
+      AST
       Main
+      Parser
   other-modules:
       Paths_minic
   hs-source-dirs:
@@ -39,7 +40,8 @@ library
 executable minic-exe
   main-is: Main.hs
   other-modules:
-      Lib
+      AST
+      Parser
       Paths_minic
   hs-source-dirs:
       src
