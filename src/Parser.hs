@@ -16,12 +16,11 @@ import qualified Text.Megaparsec.Char.Lexer as L
 type Parser = Parsec Void String
 
 -- keywords reserved by the language
-keywords = ["auto", "break", "case", "char", "const", "continue", "default"
+keywords = ["auto", "break", "case", "char", "constant", "continue", "default"
             , "do", "double", "else", "enum", "extern", "float", "for"
             , "goto", "if", "int", "long", "register", "return", "short"
             , "signed", "sizeof", "static", "struct", "switch", "typedef"
             , "union", "unsigned", "void", "volatile", "while"]
-
 
 -- Skips all white space characters and commented sections
 skip :: Parser ()
@@ -40,27 +39,28 @@ symbol = L.symbol skip
 int :: Parser Int
 int = lexeme L.decimal
 
-parseVariable :: Parser Expr
-parseVariable = Var <$> lexeme identifier
+-- Parses a single variable
+variable :: Parser Expr
+variable = Var <$> identifier
 
-parseConst :: Parser Expr
-parseConst = IntConst <$> int
+constant :: Parser Expr
+constant = IntConst <$> int
 
 parens :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")
 
 -- Parses a unit with the smallest precedence in an expression
-parseTerm :: Parser Expr
-parseTerm = parens parseExpr
-         <|> parseVariable
-         <|> parseConst
+term :: Parser Expr
+term = parens expr
+         <|> variable
+         <|> constant
 
 
 -- Operator table
 -- Every inner list is a level of precedence that contains
 -- all the operators of that level.
 -- Precedence levels are in descending order.
--- Assignment needs to handle context later on.
+-- Assignment context needs to handled on a later phase.
 operatorTable :: [[Operator Parser Expr]]
 operatorTable =
   [
@@ -83,20 +83,103 @@ assign :: String -> (Expr -> Expr -> Expr) -> Operator Parser Expr
 assign op f = InfixR $ f <$ symbol op
 
 -- Parses an expression using Megaparsec's `makeExprParser`,
--- parseTerm and operatorTable
-parseExpr :: Parser Expr
-parseExpr =  makeExprParser parseTerm operatorTable
+-- term and operatorTable
+expr :: Parser Expr
+expr = makeExprParser term operatorTable
 
 -- Parser for a single translation unit (i.e, a single source code file)
+-- Parses multiple top level declarations and definitions
+-- tunit : topLevel* ;
 tunit :: Parser TUnit
-tunit = undefined
+tunit = TUnit <$> many topLevel
 
--- Parser for types
+-- Parser for top-level declarations and definitions
+-- topLevel : decl
+--          | func ;
+topLevel :: Parser TL
+topLevel =  try (GDecl <$> decl)
+        <|> FDef <$> func
+
+-- Parser for basic declarations
+-- decl : type id ';' ;
+decl :: Parser Decl
+decl = Decl <$> tpe <*> (identifier <* lexeme (char ';'))
+
+-- Parser for functions
+-- func : type id params block ;
+func :: Parser Func
+func = Func <$> tpe <*> identifier <*> params <*> block
+
+-- Parser for parameters
+-- params : param (',' param)*
+params :: Parser [Param]
+params = do
+  lexeme (char '(')
+  ps <- param `sepBy` lexeme (char ',')
+  lexeme (char ')')
+  return $ ps
+
+-- Parses a single param
+-- param : type id ;
+param :: Parser Param
+param = Param <$> tpe <*> identifier
+
+-- Parses a single program block, i.e an optional collection of
+-- decls or stmts inside curly brackets
+-- block : '{' (stmt | decl)* '}' ;
+block :: Parser Block
+block = do
+  lexeme (char '{')
+  list <- many (Left <$> decl <|> Right <$> stmt)
+  lexeme (char '}')
+  return $ Block list
+
+-- Parses a single statement
+-- stmt : block
+--      | expr_stmt
+--      | ifElse
+--      | while ;
+stmt :: Parser Stmt
+stmt =  BlockStmt <$> block
+    <|> expr_stmt
+    <|> ifElse
+    <|> while
+
+-- Parses and expression statement
+-- expr_stmt : expr ';' ;
+expr_stmt :: Parser Stmt
+expr_stmt = ExprStmt <$> (expr <* lexeme (char ';'))
+
+-- Parses an if else statement
+-- ifelse : 'if' expr 'then' stmt 'else' stmt ;
+ifElse :: Parser Stmt
+ifElse = do
+  symbol "if"
+  e <- expr
+  symbol "then"
+  s1 <- stmt
+  symbol "else"
+  s2 <- stmt
+  return $ IfElse e s1 s2
+
+-- Parser a while statement
+-- while : 'while' '(' expr ')' stmt ;
+while :: Parser Stmt
+while = do
+  symbol "while"
+  symbol "("
+  e <- expr
+  symbol ")"
+  s <- stmt
+  return $ While e s
+
+-- Type : 'int'
+--      | 'void' ;
 tpe :: Parser Type
 tpe =  CInt  <$ lexeme (chunk "int")
    <|> CVoid <$ lexeme (chunk "void")
 
--- A single starting char for an identifier, i.e "a-zA-Z_"
+-- identifier : [a-zA-Z_] [a-zA-Z_0-9]* ;
 idStart :: Parser Char
 idStart = lexeme lowerChar
      <|>  lexeme upperChar

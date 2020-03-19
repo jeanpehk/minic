@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 9b5c36129373f30ae99b6c5c368f7dc1d96de7a47be45176591755f715be0e52
+-- hash: f2a585be44100bca36287b8c5f18d5f1c64d3fd91786a32d7e1419c17e267efb
 
 name:           minic
 version:        0.1.0.0
@@ -37,6 +37,7 @@ library
       base >=4.7 && <5
     , megaparsec
     , parser-combinators
+    , pretty-simple
     , text
   default-language: Haskell2010
 
@@ -54,6 +55,7 @@ executable minic-exe
     , megaparsec
     , minic
     , parser-combinators
+    , pretty-simple
     , text
   default-language: Haskell2010
 
@@ -73,5 +75,6 @@ test-suite minic-test
     , megaparsec
     , minic
     , parser-combinators
+    , pretty-simple
     , text
   default-language: Haskell2010

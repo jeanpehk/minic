@@ -3,14 +3,23 @@ module AST where
 -- Datatypes for the parser to use
 -- to construct the AST
 
+-- Translation unit
 data TUnit
-  = TUnit [Either Decl Func]
+  = TUnit [TL]
   deriving (Eq, Show)
 
+-- Top-level declarations / definitions
+data TL
+  = GDecl Decl
+  | FDef Func
+  deriving (Eq, Show)
+
+-- Function
 data Func
   = Func Type Id [Param] Block
   deriving (Eq, Show)
 
+-- Program block, i.e a compound statement
 data Block
   = Block [Either Decl Stmt]
   deriving (Eq, Show)
@@ -25,7 +34,8 @@ data Param
 
 data Stmt
   = BlockStmt Block
-  | IfThen Expr Stmt Stmt
+  | ExprStmt Expr
+  | IfElse Expr Stmt Stmt
   | While Expr Stmt
   deriving (Eq, Show)
 
