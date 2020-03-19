@@ -55,7 +55,6 @@ term = parens expr
          <|> variable
          <|> constant
 
-
 -- Operator table
 -- Every inner list is a level of precedence that contains
 -- all the operators of that level.
@@ -78,9 +77,10 @@ operatorTable =
 binary :: String -> (Expr -> Expr -> Expr) -> Operator Parser Expr
 binary op f = InfixL $ f <$ symbol op
 
--- Helper to write assign stmt for op table
+-- Helper to write assignment stmt for op table
+-- Needs to make sure '=' is not followed by another '='
 assign :: String -> (Expr -> Expr -> Expr) -> Operator Parser Expr
-assign op f = InfixR $ f <$ symbol op
+assign op f = InfixR $ f <$ (lexeme . try) (char '=' <* notFollowedBy (char '='))
 
 -- Parses an expression using Megaparsec's `makeExprParser`,
 -- term and operatorTable
@@ -156,7 +156,6 @@ ifElse :: Parser Stmt
 ifElse = do
   symbol "if"
   e <- expr
-  symbol "then"
   s1 <- stmt
   symbol "else"
   s2 <- stmt
