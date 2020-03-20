@@ -24,7 +24,7 @@ block
 stmt
   : block
   | expr? ';'
-  | 'if' expr 'then' stmt 'else' stmt
+  | 'if' expr stmt 'else' stmt
   | 'while' expr stmt
   ;
 
@@ -34,7 +34,8 @@ expr
   | '(' expr ')'
   | expr ('/' | '*') expr
   | expr ('+' | '-') expr
-  | expr ('>' | '<' | '==') expr
+  | expr ('>' | '<' ) expr
+  | expr ('==') expr
   | ID '=' expr
   ;
 
