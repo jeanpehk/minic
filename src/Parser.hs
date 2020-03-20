@@ -113,25 +113,22 @@ params = do
   return $ ps
 
 -- Parses a single param
---          <|> expr
 -- param : type id ;
 param :: Parser Param
 param = Param <$> tpe <*> identifier
 
--- Parses and expression
+-- Parses an expression
 -- expr : id '=' arithExpr
 --      | arithExpr
 expr :: Parser Expr
 expr = Assign <$> lvalue <*> expr
     <|> exprArith
 
--- Parses an arithmetic expression using Megaparsec's `makeExprParser`,
--- term and operatorTable
+-- Parses an arithmetic expression using Megaparsec's `makeExprParser`
 exprArith :: Parser Expr
 exprArith = makeExprParser term operatorTable
 
--- Parses a single program block, i.e an optional collection of
--- decls or stmts inside curly brackets
+-- Parses a single program block
 -- block : '{' (stmt | decl)* '}' ;
 block :: Parser Block
 block = do
@@ -142,22 +139,23 @@ block = do
 
 -- Parses a single statement
 -- stmt : block
---      | expr_stmt
+--      | exprStmt
 --      | ifElse
 --      | while ;
 stmt :: Parser Stmt
 stmt =  BlockStmt <$> block
-    <|> expr_stmt
+    <|> exprStmt
     <|> ifElse
     <|> while
+    <|> nullStmt
 
 -- Parses and expression statement
 -- expr_stmt : expr ';' ;
-expr_stmt :: Parser Stmt
-expr_stmt = ExprStmt <$> (expr <* lexeme (char ';'))
+exprStmt :: Parser Stmt
+exprStmt = ExprStmt <$> (expr <* lexeme (char ';'))
 
 -- Parses an if else statement
--- ifelse : 'if' expr 'then' stmt 'else' stmt ;
+-- ifelse : 'if' expr stmt 'else' stmt ;
 ifElse :: Parser Stmt
 ifElse = do
   symbol "if"
@@ -167,36 +165,42 @@ ifElse = do
   s2 <- stmt
   return $ IfElse e s1 s2
 
--- Parser a while statement
+-- Parses a while statement
 -- while : 'while' '(' expr ')' stmt ;
 while :: Parser Stmt
 while = do
   symbol "while"
-  symbol "("
-  e <- expr
-  symbol ")"
+  e <- parens expr
   s <- stmt
   return $ While e s
 
--- Type : 'int'
+-- Parses a null statement
+-- nullStmt : ';' ;
+nullStmt :: Parser Stmt
+nullStmt = Null <$ (lexeme (char ';'))
+
+-- Parses a type
+-- type : 'int'
 --      | 'void' ;
 tpe :: Parser Type
 tpe =  CInt  <$ lexeme (chunk "int")
    <|> CVoid <$ lexeme (chunk "void")
 
--- identifier : [a-zA-Z_] [a-zA-Z_0-9]* ;
+-- Parses a starting character of an identifier
 idStart :: Parser Char
 idStart = lexeme lowerChar
      <|>  lexeme upperChar
      <|>  lexeme (char '_')
 
--- A single id char that does not need to start the id, i.e "a-zA-Z_0-9"
+-- Parses a character of an identifier that does not
+-- need to start the identifier
 idRest :: Parser Char
 idRest =  idStart
       <|> lexeme digitChar
 
 -- Parses an identifier
--- Also needs to check that it is not a reserved keyword
+-- Also checks that it is not a reserved keyword
+-- identifier : [a-zA-Z_] [a-zA-Z_0-9]* ;
 identifier :: Parser Id
 identifier = (lexeme . try) (lxm >>= check)
     where

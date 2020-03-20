@@ -73,6 +73,11 @@ spec = do
     it "should parse with LT expr and ExprStmt" $
       parse stmt "" "while (myvar < 3) myvar = 3;" `shouldParse` ans
 
+  let ans = While (Eq (IntConst 2) (IntConst 3)) Null
+  describe "while with random spaces and a null stmt" $ do
+    it "should parse with EQ expr and ExprStmt" $
+      parse stmt "" "while  (  2 ==   3  ) ;" `shouldParse` ans
+
   let ans = IfElse (Eq (Var "abcd") (IntConst 5)) (ExprStmt (Assign "abcd" (IntConst 6))) (ExprStmt (Assign "abcd" (IntConst 7)))
   describe "if else statement" $ do
     it "should parse with Eq expr and assignment statements" $

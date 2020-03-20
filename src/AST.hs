@@ -37,6 +37,7 @@ data Stmt
   | ExprStmt Expr
   | IfElse Expr Stmt Stmt
   | While Expr Stmt
+  | Null
   deriving (Eq, Show)
 
 data Expr
