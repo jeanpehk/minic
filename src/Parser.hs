@@ -35,7 +35,6 @@ symbol :: String -> Parser String
 symbol = L.symbol skip
 
 -- Match single char
-
 int :: Parser Int
 int = lexeme L.decimal
 
@@ -43,9 +42,11 @@ int = lexeme L.decimal
 variable :: Parser Expr
 variable = Var <$> identifier
 
+-- Parses a constant
 constant :: Parser Expr
 constant = IntConst <$> int
 
+-- Helper to parse something between parentheses
 parens :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")
 
@@ -55,11 +56,14 @@ term = parens expr
          <|> variable
          <|> constant
 
+-- Helper to write binops for op table
+binary :: String -> (Expr -> Expr -> Expr) -> Operator Parser Expr
+binary op f = InfixL $ f <$ symbol op
+
 -- Operator table
 -- Every inner list is a level of precedence that contains
 -- all the operators of that level.
 -- Precedence levels are in descending order.
--- Assignment context needs to handled on a later phase.
 operatorTable :: [[Operator Parser Expr]]
 operatorTable =
   [
@@ -68,24 +72,13 @@ operatorTable =
     [ binary "+" Add
     , binary "-" Subtr],
     [ binary "<" Lt
-    , binary ">" Gt
-    , binary "==" Eq
-    , assign "=" Assign]
+    , binary ">" Gt],
+    [binary "==" Eq]
   ]
 
--- Helper to write binops for op table
-binary :: String -> (Expr -> Expr -> Expr) -> Operator Parser Expr
-binary op f = InfixL $ f <$ symbol op
-
--- Helper to write assignment stmt for op table
--- Needs to make sure '=' is not followed by another '='
-assign :: String -> (Expr -> Expr -> Expr) -> Operator Parser Expr
-assign op f = InfixR $ f <$ (lexeme . try) (char '=' <* notFollowedBy (char '='))
-
--- Parses an expression using Megaparsec's `makeExprParser`,
--- term and operatorTable
-expr :: Parser Expr
-expr = makeExprParser term operatorTable
+-- Parser an lvalue for assignment expressions
+lvalue :: Parser Id
+lvalue = (lexeme . try) (identifier <* (char '=') <* notFollowedBy (char '='))
 
 -- Parser for a single translation unit (i.e, a single source code file)
 -- Parses multiple top level declarations and definitions
@@ -120,9 +113,22 @@ params = do
   return $ ps
 
 -- Parses a single param
+--          <|> expr
 -- param : type id ;
 param :: Parser Param
 param = Param <$> tpe <*> identifier
+
+-- Parses and expression
+-- expr : id '=' arithExpr
+--      | arithExpr
+expr :: Parser Expr
+expr = Assign <$> lvalue <*> expr
+    <|> exprArith
+
+-- Parses an arithmetic expression using Megaparsec's `makeExprParser`,
+-- term and operatorTable
+exprArith :: Parser Expr
+exprArith = makeExprParser term operatorTable
 
 -- Parses a single program block, i.e an optional collection of
 -- decls or stmts inside curly brackets

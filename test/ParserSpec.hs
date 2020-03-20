@@ -42,7 +42,7 @@ spec = do
     it "should parse with correct precedence" $
       parse expr "" "2*3+2-33/25" `shouldParse` ans
 
-  let ans = Assign (Var "a") (Add (IntConst 3) (IntConst 2))
+  let ans = Assign "a" (Add (IntConst 3) (IntConst 2))
   describe "expr with assignment" $ do
     it "should parse with assignment as lowest prec" $
       parse expr "" "a=3+2" `shouldParse` ans
@@ -52,7 +52,7 @@ spec = do
     it "should parse comparisons as lower prec than arith ops" $
       parse expr "" "2 + 3 < 4" `shouldParse` ans
 
-  let ans = Assign (Var "a") (Assign (Var "b") (Assign (Var "c") (IntConst 4)))
+  let ans = Assign "a" (Assign "b" (Assign "c" (IntConst 4)))
   describe "expr with multiple assignments" $ do
     it "should parse assignments as right assoc" $
       parse expr "" "a=b=c=4" `shouldParse` ans
@@ -62,14 +62,18 @@ spec = do
     it "should parse correctly" $
       parse (expr <* eof) "" "(2+2) * (3+1)  " `shouldParse` ans
 
+  describe "longer munch rule: equality over assignment" $ do
+    it "should parse as eq expr" $
+      parse expr  "" "a==3" `shouldParse` Eq (Var "a") (IntConst 3)
+
 -- statements
 
-  let ans = While (Lt (Var "myvar") (IntConst 3)) (ExprStmt (Assign (Var "myvar") (IntConst 3)))
+  let ans = While (Lt (Var "myvar") (IntConst 3)) (ExprStmt (Assign "myvar" (IntConst 3)))
   describe "while stmt" $ do
     it "should parse with LT expr and ExprStmt" $
       parse stmt "" "while (myvar < 3) myvar = 3;" `shouldParse` ans
 
-  let ans = IfElse (Eq (Var "abcd") (IntConst 5)) (ExprStmt (Assign (Var "abcd") (IntConst 6))) (ExprStmt (Assign (Var "abcd") (IntConst 7)))
+  let ans = IfElse (Eq (Var "abcd") (IntConst 5)) (ExprStmt (Assign "abcd" (IntConst 6))) (ExprStmt (Assign "abcd" (IntConst 7)))
   describe "if else statement" $ do
     it "should parse with Eq expr and assignment statements" $
       parse stmt "" "if (abcd == 5) abcd = 6; else abcd = 7;" `shouldParse` ans

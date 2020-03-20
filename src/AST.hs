@@ -49,7 +49,7 @@ data Expr
   | Lt Expr Expr
   | Gt Expr Expr
   | Eq Expr Expr
-  | Assign Expr Expr
+  | Assign Id Expr
   deriving (Eq, Show)
 
 data Type
