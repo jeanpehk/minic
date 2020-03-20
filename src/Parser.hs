@@ -84,7 +84,7 @@ lvalue = (lexeme . try) (identifier <* (char '=') <* notFollowedBy (char '='))
 -- Parses multiple top level declarations and definitions
 -- tunit : topLevel* ;
 tunit :: Parser TUnit
-tunit = TUnit <$> many topLevel
+tunit = TUnit <$> (many topLevel) <* eof
 
 -- Parser for top-level declarations and definitions
 -- topLevel : decl

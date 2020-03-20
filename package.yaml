@@ -9,13 +9,14 @@ copyright:           "MIT"
 extra-source-files:
 - README.md
 
-# synopsis:            Compiler for as subset of C that compiles to LLVM.
+# synopsis:            Compiler for as subset of C that uses LLVM for compilation.
 # category:            Compilers
 
 description:         Please see the README on GitHub at <https://github.com/jeanpehk/minic#readme>
 
 dependencies:
 - base >= 4.7 && < 5
+- haskeline
 - megaparsec
 - parser-combinators
 - pretty-simple

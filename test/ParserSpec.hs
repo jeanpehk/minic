@@ -78,12 +78,18 @@ spec = do
     it "should parse with EQ expr and ExprStmt" $
       parse stmt "" "while  (  2 ==   3  ) ;" `shouldParse` ans
 
-  let ans = IfElse (Eq (Var "abcd") (IntConst 5)) (ExprStmt (Assign "abcd" (IntConst 6))) (ExprStmt (Assign "abcd" (IntConst 7)))
+  let ans = IfElse (Eq (Var "abcd") (IntConst 5))
+                   (ExprStmt (Assign "abcd" (IntConst 6)))
+                   (ExprStmt (Assign "abcd" (IntConst 7)))
   describe "if else statement" $ do
     it "should parse with Eq expr and assignment statements" $
       parse stmt "" "if (abcd == 5) abcd = 6; else abcd = 7;" `shouldParse` ans
 
 -- translation unit
+
+  describe "translation unit" $ do
+    it "doesn't allow junk as input" $
+      parse tunit "" `shouldFailOn` "djklkj"
 
   let ans = TUnit [GDecl (Decl CInt "a"), GDecl (Decl CInt "b")]
   describe "translation unit with decls" $ do
