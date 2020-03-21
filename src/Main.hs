@@ -52,4 +52,5 @@ repl = do
                             Left  err -> do {outputStrLn $ show err; loop}
                             Right res -> do
                               outputStrLn $ "Input typechecked without error."
+                              outputStrLn $ show res
                               loop

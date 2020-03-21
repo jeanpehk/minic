@@ -8,9 +8,11 @@ import qualified Data.Map as Map
 -- This module contains type and context checking for minic.
 
 data SymbolTable = ST { getSt :: Map.Map Id Type }
+  deriving (Eq, Show)
 
 -- Type environment for the program
 data Env = Env { active :: SymbolTable, blocks :: [SymbolTable] }
+  deriving (Eq, Show)
 
 -- Error datatypes
 data Error
@@ -25,7 +27,6 @@ data Error
 type Checker a = ExceptT Error (State Env) a
 
 -- Run the checker
-runChecker :: TUnit -> (Either Error (), Env)
 runChecker tunit = (runState . runExceptT) (checkTu tunit) env
   where
     env = Env { active = ST Map.empty, blocks = [ST Map.empty] }
@@ -34,6 +35,37 @@ runChecker tunit = (runState . runExceptT) (checkTu tunit) env
 addId :: Type -> Id -> Env -> Env
 addId tpe id env = Env { active = ST (Map.insert id tpe (getSt (active env)))
                        , blocks = blocks env }
+
+-- Adds a new block into Env and makes it active
+addBlock :: Env -> Env
+addBlock (Env active blocks) = Env (ST Map.empty) (active:blocks)
+
+-- Drops the current active block from env and makes the previous one active
+dropBlock :: Env -> Env
+dropBlock env = case blocks env of
+                  (x:xs) -> Env { active = x, blocks = xs }
+                  []     -> Env { active = ST Map.empty, blocks = [] }
+
+-- Look for id from blocks incase it is not in the active one
+lookFromBlocks :: Id -> [SymbolTable] -> Maybe Type
+lookFromBlocks id (x:xs) = case Map.lookup id (getSt x) of
+                             Nothing -> lookFromBlocks id xs
+                             Just x  -> Just x
+lookFromBlocks id []  = Nothing
+
+-- Get types of already declared variables from the entire Env
+getDeclaredId :: Id -> Env -> Maybe Type
+getDeclaredId id env = case Map.lookup id st of
+                 Nothing -> lookFromBlocks id (blocks env)
+                 Just x  -> Just x
+  where
+    st = getSt (active env)
+
+-- Look for id from active symbol table
+-- Used for declaring values
+getId :: Id -> Env -> Maybe Type
+getId id env = Map.lookup id (getSt (active env))
+
 -- Check translation unit
 checkTu :: TUnit -> Checker ()
 checkTu (TUnit tl) = do
@@ -42,36 +74,50 @@ checkTu (TUnit tl) = do
 
 -- Check top-level
 checkTl :: TL -> Checker ()
-checkTl (GDecl d) = checkDecl d
+checkTl (GDecl (Decl CVoid _)) = throwError $ SError "Void cannot have an identifier"
+checkTl (GDecl (Decl tpe id)) = do
+  env <- get
+  case getId id env of
+    Nothing -> put $ addId tpe id env
+    Just x  -> throwError $ TError ("id: '" ++ id ++ "' already declared")
+  return ()
 
 -- Check function
 checkTl (FDef (Func tpe id params block)) = do
   env <- get
-  case Map.lookup id (getSt (active env)) of
-    Nothing -> put $ addId tpe id env -- TODO prop..
+  case getId id env of
+    Nothing -> put $ addId tpe id env
     Just x  -> throwError $ TError ("id: '" ++ id ++ "' already declared")
+  nenv <- get
+  put $ addBlock nenv
   mapM checkParam params
   checkBlock block
+  nnenv <- get
+  put $ dropBlock nnenv
   return ()
 
 -- Check parameters
 checkParam :: Param -> Checker ()
 checkParam (Param tpe id) = do
   env <- get
-  case Map.lookup id (getSt (active env)) of
+  case getId id env of
     Nothing -> put $ addId tpe id env
     Just x  -> throwError $ DError id
 
 -- Check a block
 checkBlock :: Block -> Checker ()
 checkBlock (Block ds) = do
+  env <- get
+  put $ addBlock env
   let f = \y -> case y of
              Left d  -> checkDecl d
              Right s -> checkStmt s
+  nenv <- get
+  put $ dropBlock nenv
   mapM f ds
   return ()
 
--- Check a statement
+-- Checks for statements
 checkStmt :: Stmt -> Checker ()
 checkStmt (BlockStmt b) = checkBlock b
 checkStmt (ExprStmt e) = do
@@ -88,20 +134,20 @@ checkStmt (While e s) = do
   return ()
 checkStmt Null = return ()
 
--- Check a declaration
+-- Checks for declarations
 checkDecl :: Decl -> Checker ()
 checkDecl (Decl CVoid _ ) = throwError $ SError "Void cannot have an identifier"
 checkDecl (Decl tpe id) = do
   env <- get
-  case Map.lookup id (getSt (active env)) of
+  case getDeclaredId id env of
     Nothing -> put $ addId tpe id env
     Just x  -> throwError $ DError id
 
--- Check an expression TODO prop checks only active block
+-- Checks for expressions
 checkExpr :: Expr -> Checker Type
 checkExpr (Var id) = do
   env <- get
-  case Map.lookup id (getSt (active env)) of
+  case getDeclaredId id env of
     Nothing -> throwError $ DError id
     Just x  -> return x
 
@@ -115,8 +161,7 @@ checkExpr (Gt e1 e2)    = binops e1 e2
 checkExpr (Eq e1 e2)    = binops e1 e2
 checkExpr (Assign id e) = do
   env <- get
-  case Map.lookup id (getSt (active env)) of
-    -- TODO prop checks only active block
+  case getDeclaredId id env of
     Nothing -> throwError $ TError ("id: '" ++ id ++ "' not defined")
     Just x  -> do
       etype <- checkExpr e
