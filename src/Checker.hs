@@ -30,26 +30,26 @@ runChecker tunit = (runState . runExceptT) (checkTu tunit) env
   where
     env = Env { active = ST Map.empty, blocks = [ST Map.empty] }
 
+-- Add a new identifier into the environment
+addId :: Type -> Id -> Env -> Env
+addId tpe id env = Env { active = ST (Map.insert id tpe (getSt (active env)))
+                       , blocks = blocks env }
 -- Check translation unit
 checkTu :: TUnit -> Checker ()
 checkTu (TUnit tl) = do
   mapM checkTl tl
   return ()
 
--- Add a new identifier into the environment.
-addId :: Type -> Id -> Env -> Env
-addId tpe id env = Env { active = ST (Map.insert id tpe (getSt (active env)))
-                       , blocks = blocks env }
-
 -- Check top-level
 checkTl :: TL -> Checker ()
 checkTl (GDecl d) = checkDecl d
+
 -- Check function
 checkTl (FDef (Func tpe id params block)) = do
   env <- get
   case Map.lookup id (getSt (active env)) of
     Nothing -> put $ addId tpe id env -- TODO prop..
-    Just x  -> throwError $ TError ("id: '" ++ "' already declared")
+    Just x  -> throwError $ TError ("id: '" ++ id ++ "' already declared")
   mapM checkParam params
   checkBlock block
   return ()
