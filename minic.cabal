@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 92ab8c9c4eaafeba64fadfcb29851ff91d8c33714ef6f6ab838ca626f53e1735
+-- hash: 75dae1cfaec861ec3ccd06989a24e1dbcfecabff0e0619dba2b11ed16ba944ec
 
 name:           minic
 version:        0.1.0.0
@@ -27,6 +27,7 @@ source-repository head
 library
   exposed-modules:
       AST
+      Checker
       Main
       Parser
   other-modules:
@@ -35,8 +36,10 @@ library
       src
   build-depends:
       base >=4.7 && <5
+    , containers
     , haskeline
     , megaparsec
+    , mtl
     , parser-combinators
     , pretty-simple
     , text
@@ -46,6 +49,7 @@ executable minic-exe
   main-is: Main.hs
   other-modules:
       AST
+      Checker
       Parser
       Paths_minic
   hs-source-dirs:
@@ -53,9 +57,11 @@ executable minic-exe
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
+    , containers
     , haskeline
     , megaparsec
     , minic
+    , mtl
     , parser-combinators
     , pretty-simple
     , text
@@ -72,11 +78,13 @@ test-suite minic-test
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
+    , containers
     , haskeline
     , hspec
     , hspec-megaparsec
     , megaparsec
     , minic
+    , mtl
     , parser-combinators
     , pretty-simple
     , text

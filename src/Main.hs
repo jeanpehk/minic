@@ -2,6 +2,7 @@ module Main where
 
 import Parser
 import AST
+import Checker
 import Text.Megaparsec
 import Text.Pretty.Simple (pPrint)
 import System.Environment
@@ -21,11 +22,11 @@ main = do
 printParser fn = do
   program <- readFile fn
   case parse tunit fn program of
-    Left err  -> putStr (errorBundlePretty err)
+    Left  err -> putStr (errorBundlePretty err)
     Right res -> pPrint res
 
 parseInp fn = case parse tunit "" fn of
-                Left err  -> outputStrLn (errorBundlePretty err)
+                Left  err -> outputStrLn (errorBundlePretty err)
                 Right res -> pPrint res
 
 -- Starts a REPL
@@ -43,6 +44,10 @@ repl = do
         Nothing -> return ()
         Just "q" -> return ()
         Just input -> do
-          parseInp input
-          loop
-
+          case parse tunit "" input of
+            Left  err -> outputStrLn (errorBundlePretty err)
+            Right res -> case fst (runChecker res) of
+                          Left  err -> outputStrLn $ show err
+                          Right res -> do
+                            outputStrLn $ "Input typechecked without error."
+                            loop
