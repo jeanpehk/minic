@@ -91,7 +91,7 @@ tunit = TUnit <$> (many topLevel) <* eof
 --          | func ;
 topLevel :: Parser TL
 topLevel =  try (GDecl <$> decl)
-        <|> FDef <$> func
+        <|> try (FDef <$> func)
 
 -- Parser for basic declarations
 -- decl : type id ';' ;
@@ -183,8 +183,8 @@ nullStmt = Null <$ (lexeme (char ';'))
 -- type : 'int'
 --      | 'void' ;
 tpe :: Parser Type
-tpe =  CInt  <$ lexeme (chunk "int")
-   <|> CVoid <$ lexeme (chunk "void")
+tpe =  CInt  <$ lexeme (chunk "int" <* notFollowedBy (idStart <|> idRest))
+   <|> CVoid <$ lexeme (chunk "void" <* notFollowedBy (idStart <|> idRest))
 
 -- Parses a starting character of an identifier
 idStart :: Parser Char

@@ -30,9 +30,17 @@ spec = do
   describe "int" $ do
     it "parses as int" $
       parse tpe "" "int" `shouldParse` CInt
+    it "doesn't allow alphabetic chars after 't'" $
+      parse tpe "" `shouldFailOn` "intskjd"
+    it "doesn't allow any underscore after 't'" $
+      parse tpe "" `shouldFailOn` "int_"
   describe "void" $ do
     it "parses as void" $
       parse tpe "" "void" `shouldParse` CVoid
+    it "doesn't allow num chars after 'd'" $
+      parse tpe "" `shouldFailOn` "void214d"
+    it "doesn't allow any underscore after 'd'" $
+      parse tpe "" `shouldFailOn` "void_"
 
 -- expressions
 

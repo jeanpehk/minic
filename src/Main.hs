@@ -45,9 +45,11 @@ repl = do
         Just "q" -> return ()
         Just input -> do
           case parse tunit "" input of
-            Left  err -> outputStrLn (errorBundlePretty err)
-            Right res -> case fst (runChecker res) of
-                          Left  err -> outputStrLn $ show err
-                          Right res -> do
-                            outputStrLn $ "Input typechecked without error."
-                            loop
+            Left  err -> do {outputStrLn (errorBundlePretty err); loop}
+            Right res -> do
+                          outputStrLn $ show res
+                          case fst (runChecker res) of
+                            Left  err -> do {outputStrLn $ show err; loop}
+                            Right res -> do
+                              outputStrLn $ "Input typechecked without error."
+                              loop

@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 75dae1cfaec861ec3ccd06989a24e1dbcfecabff0e0619dba2b11ed16ba944ec
+-- hash: a9a4a0cc178aa30e4c697ce734c3e880302583b9153727800d0b1afab9397f7f
 
 name:           minic
 version:        0.1.0.0
@@ -71,6 +71,7 @@ test-suite minic-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      CheckerSpec
       ParserSpec
       Paths_minic
   hs-source-dirs:
