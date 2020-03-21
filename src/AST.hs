@@ -4,7 +4,7 @@ module AST where
 -- to construct the AST
 
 -- Translation unit
-data TUnit
+newtype TUnit
   = TUnit [TL]
   deriving (Eq, Show)
 
@@ -20,7 +20,7 @@ data Func
   deriving (Eq, Show)
 
 -- Program block, i.e a compound statement
-data Block
+newtype Block
   = Block [Either Decl Stmt]
   deriving (Eq, Show)
 
