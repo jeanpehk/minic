@@ -16,18 +16,21 @@ main = do
   args <- getArgs
   case args of
     [] -> repl
-    [fn] -> printParser fn
+    [fn] -> handleProg fn
 
--- Parses given input and prints the result
-printParser fn = do
+-- Handle given program.
+-- ATM runs the parses and prints it's result on the screen,
+-- if the result was correct proceeds with typechecking, which
+-- also prints it's result on the screen.
+handleProg fn = do
   program <- readFile fn
   case parse tunit fn program of
-    Left  err -> putStr (errorBundlePretty err)
-    Right res -> pPrint res
-
-parseInp fn = case parse tunit "" fn of
-                Left  err -> outputStrLn (errorBundlePretty err)
-                Right res -> pPrint res
+    Left err  -> putStr (errorBundlePretty err)
+    Right res -> do
+                  pPrint res
+                  case fst (runChecker res) of
+                    Left err  -> putStrLn $ show err
+                    Right res -> putStrLn $ "Program typechecker found no errors."
 
 -- Starts a REPL
 -- Prints out results of parsing user input
