@@ -21,7 +21,7 @@ data Func
 
 -- Program block, i.e a compound statement
 newtype Block
-  = Block [Either Decl Stmt]
+  = Block { getBlock :: [Either Decl Stmt] }
   deriving (Eq, Show)
 
 data Decl
@@ -30,6 +30,7 @@ data Decl
 
 data Param
   = Param Type Id
+  | ParamNoId Type
   deriving (Eq, Show)
 
 data Stmt

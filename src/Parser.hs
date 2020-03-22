@@ -115,7 +115,8 @@ params = do
 -- Parses a single param
 -- param : type id ;
 param :: Parser Param
-param = Param <$> tpe <*> identifier
+param = try $ Param <$> tpe <*> identifier
+      <|> ParamNoId <$> tpe
 
 -- Parses an expression
 -- expr : id '=' arithExpr

@@ -17,9 +17,12 @@ data Env = Env { active :: SymbolTable, blocks :: [SymbolTable] }
 -- Error datatypes
 data Error
   = TError String            -- General type errors
-  | DError Id                -- Declaration errors
   | SError String            -- Syntax errors
   deriving (Eq, Show)
+
+-- Error text for declaration errors
+dError :: Id -> String
+dError id = "id: '" ++ id ++ "' already declared"
 
 -- Datatype for the checker
 -- Except for error handling and
@@ -79,30 +82,37 @@ checkTl (GDecl (Decl tpe id)) = do
   env <- get
   case getId id env of
     Nothing -> put $ addId tpe id env
-    Just x  -> throwError $ TError ("id: '" ++ id ++ "' already declared")
+    Just x  -> throwError $ TError (dError id)
   return ()
 
 -- Check function
 checkTl (FDef (Func tpe id params block)) = do
   env <- get
+  -- Add id first into top level declarations before creating a new block
   case getId id env of
     Nothing -> put $ addId tpe id env
-    Just x  -> throwError $ TError ("id: '" ++ id ++ "' already declared")
+    Just x  -> throwError $ TError (dError id)
   nenv <- get
   put $ addBlock nenv
   mapM checkParam params
-  checkBlock block
+  let f = \y -> case y of
+            Left d  -> checkDecl d
+            Right s -> checkStmt s
+  mapM f (getBlock block)
   nnenv <- get
   put $ dropBlock nnenv
   return ()
 
 -- Check parameters
 checkParam :: Param -> Checker ()
+checkParam (Param CVoid _) = throwError $ TError "Void param cannot have an identifier"
+checkParam (ParamNoId CVoid) = return ()
+checkParam (ParamNoId tpe  ) = throwError $ TError "Non-void param needs an identifier"
 checkParam (Param tpe id) = do
   env <- get
   case getId id env of
     Nothing -> put $ addId tpe id env
-    Just x  -> throwError $ DError id
+    Just x  -> throwError $ TError (dError id)
 
 -- Check a block
 checkBlock :: Block -> Checker ()
@@ -112,9 +122,10 @@ checkBlock (Block ds) = do
   let f = \y -> case y of
              Left d  -> checkDecl d
              Right s -> checkStmt s
-  nenv <- get
-  put $ dropBlock nenv
+  get
   mapM f ds
+  nnenv <- get
+  put $ dropBlock nnenv
   return ()
 
 -- Checks for statements
@@ -139,16 +150,16 @@ checkDecl :: Decl -> Checker ()
 checkDecl (Decl CVoid _ ) = throwError $ SError "Void cannot have an identifier"
 checkDecl (Decl tpe id) = do
   env <- get
-  case getDeclaredId id env of
+  case getId id env of
     Nothing -> put $ addId tpe id env
-    Just x  -> throwError $ DError id
+    Just x  -> throwError $ TError (dError id)
 
 -- Checks for expressions
 checkExpr :: Expr -> Checker Type
 checkExpr (Var id) = do
   env <- get
   case getDeclaredId id env of
-    Nothing -> throwError $ DError id
+    Nothing -> throwError $ TError (dError id)
     Just x  -> return x
 
 checkExpr (IntConst i)  = return CInt
@@ -162,7 +173,7 @@ checkExpr (Eq e1 e2)    = binops e1 e2
 checkExpr (Assign id e) = do
   env <- get
   case getDeclaredId id env of
-    Nothing -> throwError $ TError ("id: '" ++ id ++ "' not defined")
+    Nothing -> throwError $ TError (dError id)
     Just x  -> do
       etype <- checkExpr e
       case compareTypes x etype of
