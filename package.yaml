@@ -18,6 +18,8 @@ dependencies:
 - base >= 4.7 && < 5
 - containers
 - haskeline
+- llvm-hs-pure
+- llvm-hs-pretty
 - megaparsec
 - mtl
 - parser-combinators

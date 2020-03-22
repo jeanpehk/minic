@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: a9a4a0cc178aa30e4c697ce734c3e880302583b9153727800d0b1afab9397f7f
+-- hash: b36d3bda5e02cb31e6e27fa5717ddd22466280c5b71d1e1636a074f7c1ce7c74
 
 name:           minic
 version:        0.1.0.0
@@ -28,6 +28,7 @@ library
   exposed-modules:
       AST
       Checker
+      ConstrLLVM
       Main
       Parser
   other-modules:
@@ -38,6 +39,8 @@ library
       base >=4.7 && <5
     , containers
     , haskeline
+    , llvm-hs-pretty
+    , llvm-hs-pure
     , megaparsec
     , mtl
     , parser-combinators
@@ -50,6 +53,7 @@ executable minic-exe
   other-modules:
       AST
       Checker
+      ConstrLLVM
       Parser
       Paths_minic
   hs-source-dirs:
@@ -59,6 +63,8 @@ executable minic-exe
       base >=4.7 && <5
     , containers
     , haskeline
+    , llvm-hs-pretty
+    , llvm-hs-pure
     , megaparsec
     , minic
     , mtl
@@ -83,6 +89,8 @@ test-suite minic-test
     , haskeline
     , hspec
     , hspec-megaparsec
+    , llvm-hs-pretty
+    , llvm-hs-pure
     , megaparsec
     , minic
     , mtl

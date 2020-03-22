@@ -32,6 +32,7 @@ dError id = "id: '" ++ id ++ "' already declared"
 type Checker a = ExceptT Error (State Env) a
 
 -- Run the checker
+runChecker :: TUnit -> (Either Error (), Env)
 runChecker tunit = (runState . runExceptT) (checkTu tunit) env
   where
     env = Env { active = ST Map.empty, blocks = [], used = [] }
