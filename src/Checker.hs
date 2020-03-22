@@ -11,7 +11,9 @@ data SymbolTable = ST { getSt :: Map.Map Id Type }
   deriving (Eq, Show)
 
 -- Type environment for the program
-data Env = Env { active :: SymbolTable, blocks :: [SymbolTable] }
+data Env = Env { active :: SymbolTable
+               , blocks :: [SymbolTable]
+               , used   :: [SymbolTable] }
   deriving (Eq, Show)
 
 -- Error datatypes
@@ -32,22 +34,25 @@ type Checker a = ExceptT Error (State Env) a
 -- Run the checker
 runChecker tunit = (runState . runExceptT) (checkTu tunit) env
   where
-    env = Env { active = ST Map.empty, blocks = [ST Map.empty] }
+    env = Env { active = ST Map.empty, blocks = [], used = [] }
 
 -- Add a new identifier into the environment
 addId :: Type -> Id -> Env -> Env
 addId tpe id env = Env { active = ST (Map.insert id tpe (getSt (active env)))
-                       , blocks = blocks env }
+                            , blocks = blocks env
+                            , used   = used env }
 
 -- Adds a new block into Env and makes it active
 addBlock :: Env -> Env
-addBlock (Env active blocks) = Env (ST Map.empty) (active:blocks)
+addBlock (Env active blocks used) = Env (ST Map.empty) (active:blocks) (used)
 
--- Drops the current active block from env and makes the previous one active
+-- Drops the current active block active ones
 dropBlock :: Env -> Env
 dropBlock env = case blocks env of
-                  (x:xs) -> Env { active = x, blocks = xs }
-                  []     -> Env { active = ST Map.empty, blocks = [] }
+                  (x:xs) -> Env { active = x, blocks = xs
+                                , used   = active env:used env }
+                  []     -> Env { active = ST Map.empty, blocks = []
+                                , used   = used env }
 
 -- Look for id from blocks incase it is not in the active one
 lookFromBlocks :: Id -> [SymbolTable] -> Maybe Type

@@ -12,7 +12,7 @@ import Test.Hspec.Megaparsec
 checkRes x = fst $ runChecker x
 exprTest x = fst $ (runState . runExceptT) (checkExpr x) env
 
-env = Env { active = ST Map.empty, blocks = [ST Map.empty]}
+env = Env { active = ST Map.empty, blocks = [], used = []}
 
 spec :: Spec
 spec = do

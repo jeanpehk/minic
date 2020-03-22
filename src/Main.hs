@@ -51,9 +51,8 @@ repl = do
             Left  err -> do {outputStrLn (errorBundlePretty err); loop}
             Right res -> do
                           outputStrLn $ show res
-                          case fst (runChecker res) of
-                            Left  err -> do {outputStrLn $ show err; loop}
-                            Right res -> do
+                          case runChecker res of
+                            (Left  err, _) -> do {outputStrLn $ show err; loop}
+                            (Right res, st) -> do
                               outputStrLn $ "Input typechecked without error."
-                              outputStrLn $ show res
                               loop
