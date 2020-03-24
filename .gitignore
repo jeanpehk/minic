@@ -3,4 +3,5 @@
 *.swp
 *.swo
 stack.yaml.lock
+a.out
 

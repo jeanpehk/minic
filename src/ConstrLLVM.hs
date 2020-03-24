@@ -7,6 +7,7 @@ import Data.Text.Lazy.IO as T
 import qualified Data.Text.Lazy as L
 
 import Data.String
+import Data.Word
 
 import qualified AST as Mc
 
@@ -16,50 +17,65 @@ import Control.Monad.State
 import qualified Data.Map as Map
 
 import LLVM.Pretty
-import qualified LLVM.AST as LLVM
-import qualified LLVM.AST.Name as LLVM
-import qualified LLVM.AST.Constant as LLVM
+import qualified LLVM.AST as IR
+import qualified LLVM.AST.Name as IR
+import qualified LLVM.AST.Constant as IR
 import qualified LLVM.IRBuilder.Module as IR
 
 -- This module constructs the llvm module
 
+------------------------------------------------------------
+-- Datatypes
+------------------------------------------------------------
+
 type Codegen a = Checker a
 
-int32 :: LLVM.Type
-int32 = LLVM.IntegerType 32
+type GenState a = (State Gen a)
+
+data Gen
+  = Gen { irblocks :: [Map.Map Block IR.Name]
+        , env      :: [ST] }
+  deriving (Eq, Show)
+
+data Block
+  = Block { idx :: Int
+          , stack :: [IR.Named IR.Instruction] }
+  deriving (Eq, Show)
+
+newtype ST = ST (Map.Map String IR.Operand)
+  deriving (Eq, Show)
+
+------------------------------------------------------------
+-- Functions for building an LLVM Module
+------------------------------------------------------------
+
+int32 :: IR.Type
+int32 = IR.IntegerType 32
 
 -- Change type from own AST into LLVM
-decideType :: Mc.Type -> LLVM.Type
-decideType Mc.CInt = LLVM.IntegerType 32
+decideType :: Mc.Type -> IR.Type
+decideType Mc.CInt = int32
 
--- Changes all traversed blocks in env back to normal blocks
-rebuildEnv :: Env -> Env
-rebuildEnv env = Env { active = active env, blocks = used env, used = [] }
+--runCodegen :: Mc.TUnit -> Env -> (Either Error IR.Module, Env)
+--runCodegen tunit = (runState . runExceptT) (codeGen tunit)
 
--- Simple test to try out running codegen
-test :: IO ()
-test = case fst (runCodegen ast env) of
-        Left err -> T.putStrLn $ L.pack $ show err
-        Right x  -> T.putStrLn $ ppllvm x
+runGen :: Mc.TUnit -> (IR.Module, Gen)
+runGen tunit = runState (codeGen tunit) gen
   where
-    ast = Mc.TUnit [Mc.GDecl (Mc.Decl Mc.CInt "ok")]
-    env = Env { active = ST (Map.fromList [("ok", Mc.CInt)])
-              , blocks = []
-              , used   = [] }
+    gen = Gen { irblocks = [], env = [] }
 
-runCodegen :: Mc.TUnit -> Env -> (Either Error LLVM.Module, Env)
-runCodegen tunit = (runState . runExceptT) (codeGen tunit)
 
-codeGen :: Mc.TUnit -> Codegen LLVM.Module
+codeGen :: Mc.TUnit -> GenState IR.Module
 codeGen (Mc.TUnit tls) = IR.buildModuleT "minic.ll" $ mdo
   let x = \y -> case y of
                   (Mc.GDecl decl) -> genDecl decl
                   (Mc.FDef func)  -> genFunc func
   mapM x tls
 
-genDecl :: IR.MonadModuleBuilder m => Mc.Decl -> m LLVM.Operand
-genDecl (Mc.Decl tpe id) = do
-  IR.global (LLVM.Name (fromString id)) (decideType tpe) (LLVM.GlobalReference int32 (fromString id))
+genDecl :: IR.MonadModuleBuilder m => Mc.Decl -> m IR.Operand
+genDecl (Mc.Decl (Mc.CInt) id) = 
+  IR.global (IR.mkName id) int32 (IR.Int (fromIntegral 32) 0)
 
-genFunc func = undefined
+genFunc :: IR.MonadModuleBuilder m => Mc.Func -> m IR.Operand
+genFunc (Mc.Func tpe id params block) = undefined
 
