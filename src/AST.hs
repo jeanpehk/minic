@@ -29,7 +29,7 @@ data Decl
   deriving (Eq, Show)
 
 data Param
-  = Param Type Id
+  = Param { getPType :: Type, getPID :: Id }
   | ParamNoId Type
   deriving (Eq, Show)
 

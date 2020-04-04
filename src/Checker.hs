@@ -179,7 +179,7 @@ checkExpr (Eq e1 e2)    = binops e1 e2
 checkExpr (Assign id e) = do
   env <- get
   case getDeclaredId id env of
-    Nothing -> throwError $ TError (dError id)
+    Nothing -> throwError $ TError ("Var not declared: " ++ id)
     Just x  -> do
       etype <- checkExpr e
       case compareTypes x etype of

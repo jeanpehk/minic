@@ -47,7 +47,7 @@ handleProg fn = do
                   case runChecker res of
                     (Left err, _)  -> putStrLn $ show err
                     (Right _, st) -> do
-                                      let ast = fst (runGen res)
+                                      let ast = fst (runGen fn res)
                                       putStrLn $ L.unpack $ ppllvm $ ast
                                       toLLVM "a.out" ast
 
@@ -72,7 +72,7 @@ repl = do
                           case runChecker res of
                             (Left  err, _) -> do {outputStrLn $ show err; loop}
                             (Right _, st) -> do
-                              let ast = fst (runGen res)
+                              let ast = fst (runGen "repl" res)
                               outputStrLn $ L.unpack $ ppllvm ast
                               loop
 
