@@ -19,6 +19,7 @@ import qualified Data.Map as Map
 
 import LLVM.Pretty
 import qualified LLVM.AST as AST
+import qualified LLVM.AST.IntegerPredicate as AST
 import qualified LLVM.AST.Name as AST
 import qualified LLVM.AST.Constant as AST
 import qualified LLVM.IRBuilder.Constant as IR
@@ -89,6 +90,18 @@ addToActive st id op = case Map.lookup id (getST st) of
                            Nothing -> ST $ Map.insert id op (getST st)
                            Just x  -> error $ "Id: " ++ id ++ " already declared"
 
+-- New active for Names to avoid name collisions
+-- when moving into a new block in the source language.
+newActive :: Names -> Names
+newActive ns = Names { active = ST Map.empty, rest = active ns:rest ns }
+
+-- Drop active ST from Names when moving out of a block
+-- in the source language.
+dropActive :: Names -> Names
+dropActive ns = case rest ns of
+                  []     -> Names { active = ST Map.empty, rest = [] }
+                  (x:xs) -> Names { active = x, rest = xs }
+
 idFromNames :: String -> Names -> AST.Operand
 idFromNames id ns = case Map.lookup id (getST (active ns)) of
                       Nothing -> lookUpRest (rest ns)
@@ -108,41 +121,64 @@ getName op = case op of
 -- Generation
 ------------------------------------------------------------
 
+------------------------------------------------------------
 -- Translation units
+------------------------------------------------------------
+
 codeGen :: Mc.TUnit -> Generator [AST.Operand]
 codeGen (Mc.TUnit tls) = do
   let x = \y -> case y of
-                  (Mc.GDecl decl) -> genDecl decl
+                  (Mc.GDecl decl) -> genGlobalDecl decl
                   (Mc.FDef func)  -> genFunc func
   mapM x tls
 
+------------------------------------------------------------
 -- Top level declarations
+------------------------------------------------------------
+
 genTl (Mc.GDecl (Mc.Decl Mc.CInt id)) = do
   IR.global (AST.mkName id) int32 (AST.Int (fromIntegral 32) 0)
 
+------------------------------------------------------------
 -- Declarations
-genDecl :: (MonadState Names m, IR.MonadModuleBuilder m)
+------------------------------------------------------------
+
+genGlobalDecl :: (MonadState Names m, IR.MonadModuleBuilder m)
+        => Mc.Decl
+        -> m AST.Operand
+genGlobalDecl (Mc.Decl Mc.CInt id) = do
+  st <- get
+  d <- IR.global (AST.mkName id) int32 (AST.Int (fromIntegral 32) 0)
+  put $ Names { active = addToActive (active st) id d, rest = rest st}
+  return d
+
+genDecl :: (MonadState Names m, IR.MonadModuleBuilder m, IR.MonadIRBuilder m)
         => Mc.Decl
         -> m AST.Operand
 genDecl (Mc.Decl Mc.CInt id) = do
   st <- get
---  put $ Names { active = active st, rest = rest st}
-  d <- IR.global (AST.mkName id) int32 (AST.Int (fromIntegral 32) 0)
+  d <- IR.alloca int32 Nothing 8
   put $ Names { active = addToActive (active st) id d, rest = rest st}
-  pure d
+  return d
 
+
+------------------------------------------------------------
 -- Functions
+------------------------------------------------------------
+
 genFunc :: Mc.Func -> Generator AST.Operand
 genFunc (Mc.Func tpe id params block) = mdo
   let ps = map mkParam params
   IR.function (AST.mkName id) ps (decideType tpe) $ \ops -> mdo
 
     -- Add params to symboltable
-    st <- get
-    put $ Names { active = paramsToST (active st) params ops, rest = rest st }
-    allocs <- mapM allocParam [(p, o) | p <- params | o <- ops]
-    nst <- get
-    put $ Names { active = paramsToST (active st) params allocs, rest = rest st }
+    ns <- get
+    let nns = newActive ns
+    put $ Names { active = paramsToST (active nns) params ops, rest = rest nns }
+    gparams <- mapM genParam [(p, o) | p <- params | o <- ops]
+    nsWithParams <- get
+    put $ Names { active = paramsToST (active nsWithParams) params gparams
+                , rest = rest nsWithParams }
 
     let f = \y -> case y of
                     Left decl  -> genDecl decl
@@ -151,7 +187,9 @@ genFunc (Mc.Func tpe id params block) = mdo
 
     IR.ret $ IR.int32 0
 
--- Generate statements
+------------------------------------------------------------
+-- Statements
+------------------------------------------------------------
 
 -- Block statements
 genStmt :: (MonadState Names m, IR.MonadModuleBuilder m, IR.MonadIRBuilder m)
@@ -162,7 +200,11 @@ genStmt (Mc.BlockStmt bl) = undefined
 -- Expr statements
 genStmt (Mc.ExprStmt expr) = genExpr expr
 
--- Generate expressions
+------------------------------------------------------------
+-- Expressions
+------------------------------------------------------------
+
+-- Variables
 genExpr :: (MonadState Names m, IR.MonadModuleBuilder m, IR.MonadIRBuilder m)
         => Mc.Expr
         -> m AST.Operand
@@ -171,15 +213,65 @@ genExpr (Mc.Var id) = do
   let op = idFromNames id st
   IR.load op 8
 
+-- Addition
 genExpr (Mc.Add e ee) = do
   e1 <- genExpr e
   e2 <- genExpr ee
   IR.add e1 e2
 
--- Allocate params
-allocParam ((Mc.Param _ id), (AST.LocalReference tpe nm)) = do
+-- Subtraction
+genExpr (Mc.Subtr e ee) = do
+  e1 <- genExpr e
+  e2 <- genExpr ee
+  IR.sub e1 e2
+
+-- Multiplication
+genExpr (Mc.Mul e ee) = do
+  e1 <- genExpr e
+  e2 <- genExpr ee
+  IR.mul e1 e2
+
+-- Division
+genExpr (Mc.Div e ee) = do
+  e1 <- genExpr e
+  e2 <- genExpr ee
+  IR.sdiv e1 e2
+
+-- LT
+genExpr (Mc.Lt e ee) = do
+  e1 <- genExpr e
+  e2 <- genExpr ee
+  IR.icmp AST.SLT e1 e2
+
+-- GT
+genExpr (Mc.Gt e ee) = do
+  e1 <- genExpr e
+  e2 <- genExpr ee
+  IR.icmp AST.SGT e1 e2
+
+-- EQ
+genExpr (Mc.Eq e ee) = do
+  e1 <- genExpr e
+  e2 <- genExpr ee
+  IR.icmp AST.EQ e1 e2
+
+-- Assignment
+genExpr (Mc.Assign e ee) = do
+  ns <- get
+  let var = idFromNames e ns
+  e2 <- genExpr ee
+  IR.store e2 8 var
+  return var
+
+------------------------------------------------------------
+-- Params
+------------------------------------------------------------
+
+genParam ((Mc.Param _ id), (AST.LocalReference tpe nm)) = do
   st <- get
   let op = idFromNames id st
-  IR.alloca tpe (Just op) 32
-allocParams _ _ = error "There should be only local refs in params"
+  addr <- IR.alloca tpe (Just op) 8
+  IR.store op 8 addr
+  return addr
+genParam _ = error "There should be only local refs in params"
 
