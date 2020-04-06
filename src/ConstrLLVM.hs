@@ -48,8 +48,8 @@ newtype ST = ST { getST :: Map.Map String AST.Operand }
 int32 :: AST.Type
 int32 = AST.IntegerType 32
 
-constInt32 :: Integer -> AST.Operand
-constInt32 n = AST.ConstantOperand $ AST.Int (fromIntegral 32) n
+constInt32 :: Int -> AST.Operand
+constInt32 n = AST.ConstantOperand $ AST.Int (fromIntegral 32) (fromIntegral n)
 
 -- Change type from own AST into LLVM
 decideType :: Mc.Type -> AST.Type
@@ -118,7 +118,7 @@ getName op = case op of
                _                         -> error "Only local refs supported"
 
 ------------------------------------------------------------
--- Generation
+-- LLVM AST Generation
 ------------------------------------------------------------
 
 ------------------------------------------------------------
@@ -183,7 +183,7 @@ genFunc (Mc.Func tpe id params block) = mdo
     let f = \y -> case y of
                     Left decl  -> genDecl decl
                     Right stmt -> genStmt stmt
-    bls <- mapM f $ Mc.getBlock block
+    mapM f $ Mc.getBlock block
 
     IR.ret $ IR.int32 0
 
@@ -195,10 +195,21 @@ genFunc (Mc.Func tpe id params block) = mdo
 genStmt :: (MonadState Names m, IR.MonadModuleBuilder m, IR.MonadIRBuilder m)
         => Mc.Stmt
         -> m AST.Operand
-genStmt (Mc.BlockStmt bl) = undefined
+genStmt (Mc.BlockStmt bl) = do
+  ns <- get
+  let nns = newActive ns
+  put $ Names { active = active nns, rest = rest nns }
+  let f = \y -> case y of
+                  Left decl  -> genDecl decl
+                  Right stmt -> genStmt stmt
+  mapM f $ Mc.getBlock bl
+  return $ IR.int32 0
 
 -- Expr statements
 genStmt (Mc.ExprStmt expr) = genExpr expr
+
+-- Null statements
+genStmt (Mc.Null) = return $ IR.int32 0
 
 ------------------------------------------------------------
 -- Expressions
@@ -212,6 +223,9 @@ genExpr (Mc.Var id) = do
   st <- get
   let op = idFromNames id st
   IR.load op 8
+
+-- Int Constant
+genExpr (Mc.IntConst int) = return $ constInt32 int
 
 -- Addition
 genExpr (Mc.Add e ee) = do
@@ -256,11 +270,11 @@ genExpr (Mc.Eq e ee) = do
   IR.icmp AST.EQ e1 e2
 
 -- Assignment
-genExpr (Mc.Assign e ee) = do
+genExpr (Mc.Assign id expr) = do
   ns <- get
-  let var = idFromNames e ns
-  e2 <- genExpr ee
-  IR.store e2 8 var
+  let var = idFromNames id ns
+  e <- genExpr expr
+  IR.store e 8 var
   return var
 
 ------------------------------------------------------------
