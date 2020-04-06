@@ -133,13 +133,6 @@ codeGen (Mc.TUnit tls) = do
   mapM x tls
 
 ------------------------------------------------------------
--- Top level declarations
-------------------------------------------------------------
-
-genTl (Mc.GDecl (Mc.Decl Mc.CInt id)) = do
-  IR.global (AST.mkName id) int32 (AST.Int (fromIntegral 32) 0)
-
-------------------------------------------------------------
 -- Declarations
 ------------------------------------------------------------
 
@@ -192,7 +185,7 @@ genFunc (Mc.Func tpe id params block) = mdo
 ------------------------------------------------------------
 
 -- Block statements
-genStmt :: (MonadState Names m, IR.MonadModuleBuilder m, IR.MonadIRBuilder m)
+genStmt :: (MonadState Names m, IR.MonadModuleBuilder m, IR.MonadIRBuilder m, MonadFix m)
         => Mc.Stmt
         -> m AST.Operand
 genStmt (Mc.BlockStmt bl) = do
@@ -207,6 +200,40 @@ genStmt (Mc.BlockStmt bl) = do
 
 -- Expr statements
 genStmt (Mc.ExprStmt expr) = genExpr expr
+
+-- If Else statements
+genStmt (Mc.IfElse expr stmt1 stmt2) = mdo
+  e <- genExpr expr
+  IR.condBr e thn els
+
+  -- Then
+  thn <- IR.block
+  s1 <- genStmt stmt1
+  IR.br continue
+  -- Else
+  els <- IR.block
+  s2 <- genStmt stmt2
+  IR.br continue
+
+  continue <- IR.block
+  return $ IR.int32 0
+
+-- While statements
+genStmt (Mc.While expr stmt) = mdo
+  -- Starting block with comparison
+  IR.br bl
+  bl <- IR.block
+  e <- genExpr expr
+  IR.condBr e sBlock continue
+
+  -- Statement block
+  sBlock <- IR.block
+  s <- genStmt stmt
+  IR.br bl
+
+  -- Continuing block
+  continue <- IR.block
+  return $ IR.int32 0
 
 -- Null statements
 genStmt (Mc.Null) = return $ IR.int32 0
@@ -274,7 +301,7 @@ genExpr (Mc.Assign id expr) = do
   ns <- get
   let var = idFromNames id ns
   e <- genExpr expr
-  IR.store e 8 var
+  IR.store var 8 e
   return var
 
 ------------------------------------------------------------
@@ -285,7 +312,7 @@ genParam ((Mc.Param _ id), (AST.LocalReference tpe nm)) = do
   st <- get
   let op = idFromNames id st
   addr <- IR.alloca tpe (Just op) 8
-  IR.store op 8 addr
+  IR.store addr 8 op
   return addr
 genParam _ = error "There should be only local refs in params"
 
