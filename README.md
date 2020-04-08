@@ -1,7 +1,8 @@
 # minic
 
-Compiler for a small subset of the C programming language that uses LLVM IR. Written in Haskell. This
-is not meant to be an actual compiler but is done as a learning experiment and for university credits.
+Compiler for a small subset of the C programming language that uses LLVM IR. Written in Haskell.
+
+This is not meant to be an actual compiler but is done as a learning experiment.
 
 ## Features
 
