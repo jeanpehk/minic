@@ -4,7 +4,7 @@ module Main where
 
 import AST
 import Checker
-import ConstrLLVM
+import LLVMGen
 
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.Text.Lazy as L

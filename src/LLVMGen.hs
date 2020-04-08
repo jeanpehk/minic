@@ -4,7 +4,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ParallelListComp #-}
 
-module ConstrLLVM where
+module LLVMGen where
 
 import Data.Text.Lazy.IO as T
 import qualified Data.Text.Lazy as L
@@ -27,7 +27,7 @@ import qualified LLVM.IRBuilder.Instruction as IR
 import qualified LLVM.IRBuilder.Module as IR
 import qualified LLVM.IRBuilder.Monad as IR
 
--- This module constructs the Haskell LLVM AST representation.
+-- Construct the Haskell LLVM AST representation.
 
 ------------------------------------------------------------
 -- Datatypes
@@ -42,7 +42,7 @@ newtype ST = ST { getST :: Map.Map String AST.Operand }
   deriving (Eq, Show)
 
 ------------------------------------------------------------
--- Functions for building an LLVM Module
+-- Helper functions for building an LLVM Module
 ------------------------------------------------------------
 
 int32 :: AST.Type
@@ -54,12 +54,6 @@ constInt32 n = AST.ConstantOperand $ AST.Int (fromIntegral 32) (fromIntegral n)
 -- Change type from own AST into LLVM
 decideType :: Mc.Type -> AST.Type
 decideType Mc.CInt = int32
-
--- Starting point for generating an LLVM module
-runGen :: String -> Mc.TUnit -> (AST.Module, Names)
-runGen nm tunit = runState (IR.buildModuleT (fromString nm) (codeGen tunit)) ns
-  where
-    ns = Names { active = ST Map.empty, rest = [] }
 
 -- Simple test function
 test :: IO ()
@@ -120,6 +114,12 @@ getName op = case op of
 ------------------------------------------------------------
 -- LLVM AST Generation
 ------------------------------------------------------------
+
+runGen :: String -> Mc.TUnit -> (AST.Module, Names)
+runGen nm tunit = runState (IR.buildModuleT (fromString nm) (codeGen tunit)) ns
+  where
+    ns = Names { active = ST Map.empty, rest = [] }
+
 
 ------------------------------------------------------------
 -- Translation units
