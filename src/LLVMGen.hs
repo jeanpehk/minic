@@ -1,6 +1,5 @@
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ParallelListComp #-}
 
@@ -125,12 +124,16 @@ runGen nm tunit = runState (IR.buildModuleT (fromString nm) (codeGen tunit)) ns
 -- Translation units
 ------------------------------------------------------------
 
-codeGen :: Mc.TUnit -> Generator [AST.Operand]
+codeGen :: Mc.TUnit -> Generator ()
 codeGen (Mc.TUnit tls) = do
   let x = \y -> case y of
-                  (Mc.GDecl decl) -> genGlobalDecl decl
-                  (Mc.FDef func)  -> genFunc func
-  mapM x tls
+                  (Mc.GDecl decl) -> do
+                                       genGlobalDecl decl
+                                       return ()
+                  (Mc.FDef func)  -> do
+                                       genFunc func
+                                       return ()
+  mapM_ x tls
 
 ------------------------------------------------------------
 -- Declarations
@@ -147,12 +150,12 @@ genGlobalDecl (Mc.Decl Mc.CInt id) = do
 
 genDecl :: (MonadState Names m, IR.MonadModuleBuilder m, IR.MonadIRBuilder m)
         => Mc.Decl
-        -> m AST.Operand
+        -> m ()
 genDecl (Mc.Decl Mc.CInt id) = do
   st <- get
   d <- IR.alloca int32 Nothing 8
   put $ Names { active = addToActive (active st) id d, rest = rest st}
-  return d
+  return ()
 
 
 ------------------------------------------------------------
@@ -187,7 +190,7 @@ genFunc (Mc.Func tpe id params block) = mdo
 -- Block statements
 genStmt :: (MonadState Names m, IR.MonadModuleBuilder m, IR.MonadIRBuilder m, MonadFix m)
         => Mc.Stmt
-        -> m AST.Operand
+        -> m ()
 genStmt (Mc.BlockStmt bl) = do
   ns <- get
   let nns = newActive ns
@@ -195,11 +198,13 @@ genStmt (Mc.BlockStmt bl) = do
   let f = \y -> case y of
                   Left decl  -> genDecl decl
                   Right stmt -> genStmt stmt
-  mapM f $ Mc.getBlock bl
-  return $ IR.int32 0
+  mapM_ f $ Mc.getBlock bl
+  return ()
 
 -- Expr statements
-genStmt (Mc.ExprStmt expr) = genExpr expr
+genStmt (Mc.ExprStmt expr) = do
+  genExpr expr
+  return ()
 
 -- If Else statements
 genStmt (Mc.IfElse expr stmt1 stmt2) = mdo
@@ -216,7 +221,7 @@ genStmt (Mc.IfElse expr stmt1 stmt2) = mdo
   IR.br continue
 
   continue <- IR.block
-  return $ IR.int32 0
+  return ()
 
 -- While statements
 genStmt (Mc.While expr stmt) = mdo
@@ -233,10 +238,10 @@ genStmt (Mc.While expr stmt) = mdo
 
   -- Continuing block
   continue <- IR.block
-  return $ IR.int32 0
+  return ()
 
 -- Null statements
-genStmt (Mc.Null) = return $ IR.int32 0
+genStmt (Mc.Null) = return ()
 
 ------------------------------------------------------------
 -- Expressions
