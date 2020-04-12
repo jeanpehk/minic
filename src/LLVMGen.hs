@@ -18,6 +18,7 @@ import qualified Data.Map as Map
 
 import LLVM.Pretty
 import qualified LLVM.AST as AST
+import qualified LLVM.AST.Type as AST
 import qualified LLVM.AST.IntegerPredicate as AST
 import qualified LLVM.AST.Name as AST
 import qualified LLVM.AST.Constant as AST
@@ -44,15 +45,13 @@ newtype ST = ST { getST :: Map.Map String AST.Operand }
 -- Helper functions for building an LLVM Module
 ------------------------------------------------------------
 
-int32 :: AST.Type
-int32 = AST.IntegerType 32
-
 constInt32 :: Int -> AST.Operand
 constInt32 n = AST.ConstantOperand $ AST.Int (fromIntegral 32) (fromIntegral n)
 
 -- Change type from own AST into LLVM
 decideType :: Mc.Type -> AST.Type
-decideType Mc.CInt = int32
+decideType Mc.CInt = AST.i32
+decideType Mc.CVoid = AST.void
 
 -- Simple test function
 test :: IO ()
@@ -144,7 +143,7 @@ genGlobalDecl :: (MonadState Names m, IR.MonadModuleBuilder m)
         -> m AST.Operand
 genGlobalDecl (Mc.Decl Mc.CInt id) = do
   st <- get
-  d <- IR.global (AST.mkName id) int32 (AST.Int (fromIntegral 32) 0)
+  d <- IR.global (AST.mkName id) AST.i32 (AST.Int (fromIntegral 32) 0)
   put $ Names { active = addToActive (active st) id d, rest = rest st}
   return d
 
@@ -153,7 +152,7 @@ genDecl :: (MonadState Names m, IR.MonadModuleBuilder m, IR.MonadIRBuilder m)
         -> m ()
 genDecl (Mc.Decl Mc.CInt id) = do
   st <- get
-  d <- IR.alloca int32 Nothing 8
+  d <- IR.alloca AST.i32 Nothing 8
   put $ Names { active = addToActive (active st) id d, rest = rest st}
   return ()
 
