@@ -74,17 +74,8 @@ getDeclaredId id env = case Map.lookup id st of
 getId :: Id -> Env -> Maybe Type
 getId id env = Map.lookup id (getSt (active env))
 
--- Helper for checking binops
-binops :: Expr -> Expr -> Checker Type
-binops e1 e2 = do
-  t1 <- checkExpr e1
-  t2 <- checkExpr e2
-  case compareTypes t1 t2 of
-    Left err -> throwError err
-    Right x  -> return x
-
 ------------------------------------------------------------
--- Type comparions
+-- Type comparisons
 ------------------------------------------------------------
 
 compareTypes :: Type -> Type -> Either Error Type
@@ -99,7 +90,7 @@ compareTypes _ (CVoid) = Left $ TError "Cannot combine Void with another type"
 -- Check program
 ------------------------------------------------------------
 
-runChecker :: TUnit -> (Either Error (), Env)
+runChecker :: TUnit -> (Either Error TUnit, Env)
 runChecker tunit = (runState . runExceptT) (checkTu tunit) env
   where
     env = Env { active = ST Map.empty, blocks = [], used = [] }
@@ -108,23 +99,23 @@ runChecker tunit = (runState . runExceptT) (checkTu tunit) env
 -- Translation unit
 ------------------------------------------------------------
 
-checkTu :: TUnit -> Checker ()
+checkTu :: TUnit -> Checker TUnit
 checkTu (TUnit tl) = do
   tls <- mapM checkTl tl
-  return ()
+  return $ TUnit tls
 
 ------------------------------------------------------------
 -- Top-level
 ------------------------------------------------------------
 
-checkTl :: TL -> Checker ()
+checkTl :: TL -> Checker TL
 checkTl (GDecl (Decl CVoid _)) = throwError $ SError "Void cannot have an identifier"
-checkTl (GDecl (Decl tpe id)) = do
+checkTl gd@(GDecl (Decl tpe id)) = do
   env <- get
   case getId id env of
     Nothing -> put $ addId tpe id env
     Just x  -> throwError $ TError (dError id)
-  return ()
+  return gd
 
 ------------------------------------------------------------
 -- Function
@@ -138,119 +129,135 @@ checkTl (FDef (Func tpe id params block)) = do
     Just x  -> throwError $ TError (dError id)
   nenv <- get
   put $ addBlock nenv
-  mapM checkParam params
+  ps <- mapM checkParam params
   let f = \y -> case y of
-            Left d  -> checkDecl d
-            Right s -> checkStmt s
+            Left d  -> do
+                        decl <- checkDecl d
+                        return $ Left decl
+            Right s -> do
+                        stmt <- checkStmt s
+                        return $ Right stmt
   bls <- mapM f (getBlock block)
   nnenv <- get
   put $ dropBlock nnenv
-  return ()
+  return $ FDef (Func tpe id ps (Block bls))
 
 ------------------------------------------------------------
 -- Parameters
 ------------------------------------------------------------
 
-checkParam :: Param -> Checker ()
+checkParam :: Param -> Checker Param
 checkParam (Param CVoid _) = throwError $ TError "Void param cannot have an identifier"
-checkParam (ParamNoId CVoid) = return ()
+checkParam p@(ParamNoId CVoid) = return p
 checkParam (ParamNoId tpe  ) = throwError $ TError "Non-void param needs an identifier"
-checkParam (Param tpe id) = do
+checkParam p@(Param tpe id) = do
   env <- get
   case getId id env of
     Nothing -> put $ addId tpe id env
     Just x  -> throwError $ TError (dError id)
+  return p
 
 ------------------------------------------------------------
 -- Block
 ------------------------------------------------------------
 
-checkBlock :: Block -> Checker ()
+checkBlock :: Block -> Checker Block
 checkBlock (Block ds) = do
   env <- get
   put $ addBlock env
   let f = \y -> case y of
-             Left d  -> checkDecl d
-             Right s -> checkStmt s
+             Left d  -> do
+                         decl <- checkDecl d
+                         return $ Left decl
+             Right s -> do
+                         stmt <- checkStmt s
+                         return $ Right stmt
   get
   bls <- mapM f ds
   nnenv <- get
   put $ dropBlock nnenv
-  return ()
+  return $ Block bls
 
 ------------------------------------------------------------
 -- Statements
 ------------------------------------------------------------
 
 -- Block
-checkStmt :: Stmt -> Checker ()
-checkStmt (BlockStmt b) = checkBlock b
+checkStmt :: Stmt -> Checker Stmt
+checkStmt (BlockStmt b) = do
+  bl <- checkBlock b
+  return $ BlockStmt bl
 
 -- Expression
 checkStmt (ExprStmt e) = do
-  checkExpr e
-  return ()
+  ce <- checkExpr e
+  return $ ExprStmt (fst ce)
 
 -- IfElse
 checkStmt (IfElse e1 s1 s2) = do
-  checkExpr e1
-  checkStmt s1
-  checkStmt s2
-  return ()
+  ce <- checkExpr e1
+  cs1 <- checkStmt s1
+  cs2 <- checkStmt s2
+  return $ IfElse (fst ce) cs1 cs2
 
 -- While
 checkStmt (While e s) = do
-  checkExpr e
-  checkStmt s
-  return ()
+  ce <- checkExpr e
+  cs <- checkStmt s
+  return $ While (fst ce) cs
 
 -- Null
-checkStmt Null = return ()
+checkStmt Null = return Null
 
 ------------------------------------------------------------
 -- Declarations
 ------------------------------------------------------------
 
-checkDecl :: Decl -> Checker ()
+checkDecl :: Decl -> Checker Decl
 checkDecl (Decl CVoid _ ) = throwError $ SError "Void cannot have an identifier"
-checkDecl (Decl tpe id) = do
+checkDecl d@(Decl tpe id) = do
   env <- get
   case getId id env of
     Nothing -> put $ addId tpe id env
     Just x  -> throwError $ TError (dError id)
+  return d
 
 ------------------------------------------------------------
 -- Expressions
 ------------------------------------------------------------
 
 -- Variable
-checkExpr :: Expr -> Checker Type
-checkExpr (Var id) = do
+checkExpr :: Expr -> Checker (Expr, Type)
+checkExpr e@(Var id) = do
   env <- get
   case getDeclaredId id env of
     Nothing -> throwError $ TError (dError id)
-    Just x  -> return x
+    Just x  -> return (e, x)
 
 -- Constants
-checkExpr (IntConst i)  = return CInt
-checkExpr (CharConst c) = return CChar
+checkExpr e@(IntConst i)  = return (e, CInt)
+checkExpr e@(CharConst c) = return (e, CChar)
 
 -- BinOps
-checkExpr (BinOp op e1 e2) = do
+checkExpr e@(BinOp op e1 e2) = do
   ce1 <- checkExpr e1
   ce2 <- checkExpr e2
-  case compareTypes ce1 ce2 of
+  case compareTypes (snd ce1) (snd ce2) of
     Left err -> throwError err
-    Right x  -> return x
+    Right x  -> case x of
+                  -- Change type of BinOp if needed so
+                  -- we know when coercions are needed
+                  CInt -> return (e, x)
+                  _    -> throwError $ SError "Only Int BinOps supported"
 
 -- Assignment
-checkExpr (Assign id e) = do
+checkExpr e@(Assign id expr) = do
   env <- get
   case getDeclaredId id env of
     Nothing -> throwError $ TError ("Var not declared: " ++ id)
     Just x  -> do
-      etype <- checkExpr e
-      case compareTypes x etype of
+      etype <- checkExpr expr
+      case compareTypes x (snd etype) of
         Left err -> throwError err
-        Right x  -> return x
+        Right x  -> return (e, x)
 

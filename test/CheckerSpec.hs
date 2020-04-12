@@ -21,7 +21,7 @@ spec = do
   describe "TUnit" $ do
     describe "Decls" $ do
       it "single int with id returns no errors" $
-        checkRes (TUnit [(GDecl (Decl CInt "a"))]) `shouldBe` Right ()
+        checkRes (TUnit [(GDecl (Decl CInt "a"))]) `shouldBe` Right (TUnit [(GDecl (Decl CInt "a"))])
       it "void cannot have an id in a decl" $
         checkRes (TUnit [(GDecl (Decl CVoid "ok"))])
         `shouldBe` Left (SError "Void cannot have an identifier")
@@ -32,7 +32,7 @@ spec = do
 
     describe "Functions" $ do
       it "void function is allowed" $
-        checkRes (TUnit [FDef (Func CVoid "hey" [] (Block []))]) `shouldBe` Right ()
+        checkRes (TUnit [FDef (Func CVoid "hey" [] (Block []))]) `shouldBe` Right (TUnit [FDef (Func CVoid "hey" [] (Block []))])
       it "Functions with same not allowed" $
         checkRes (TUnit [FDef (Func CVoid "hey" [] (Block []))
                        , FDef (Func CVoid "hey" [] (Block []))])
@@ -42,11 +42,12 @@ spec = do
                               [Param CInt "a", Param CInt "a"] (Block []))])
         `shouldBe` Left (TError (dError "a"))
       it "Function can have same name as its param" $
+
         checkRes (TUnit [FDef (Func CVoid "test" [Param CInt "test"] (Block []))])
-        `shouldBe` Right ()
+        `shouldBe` Right (TUnit [FDef (Func CVoid "test" [Param CInt "test"] (Block []))])
       it "Function with single void param is ok" $
         checkRes (TUnit [FDef (Func CVoid "test" [ParamNoId CVoid] (Block []))])
-        `shouldBe` Right ()
+        `shouldBe` Right (TUnit [FDef (Func CVoid "test" [ParamNoId CVoid] (Block []))])
       it "Function with named void param is not correct" $
         checkRes (TUnit [FDef (Func CVoid "test" [Param CVoid "ok"] (Block []))])
         `shouldBe` Left (TError ("Void param cannot have an identifier"))
@@ -59,7 +60,10 @@ spec = do
         checkRes (TUnit [ GDecl (Decl CInt "a")
                        ,  FDef  (Func CVoid "f" []
                                 (Block [Left (Decl CInt "a")]))])
-        `shouldBe` Right ()
+        `shouldBe` Right (TUnit [ GDecl (Decl CInt "a")
+                       ,  FDef  (Func CVoid "f" []
+                                (Block [Left (Decl CInt "a")]))])
+
       it "decls in the same block can't have same names" $
         checkRes (TUnit [FDef (Func CVoid "f" []
                                 (Block [Left (Decl CInt "a")
@@ -74,7 +78,8 @@ spec = do
       it "decl in a function block can have the same name as the func itself" $
         checkRes (TUnit [FDef (Func CVoid "MINE" []
                                 (Block [Left (Decl CInt "MINE")]))])
-        `shouldBe` Right ()
+        `shouldBe` Right (TUnit [FDef (Func CVoid "MINE" []
+                                (Block [Left (Decl CInt "MINE")]))])
 
     describe "DeclsAndFuncs" $ do
       it "Function can't have same name as already declared var" $
@@ -84,17 +89,18 @@ spec = do
       it "Function can have param with same name as an earlier decl" $
         checkRes (TUnit [GDecl (Decl CInt "test")
                        , FDef (Func CVoid "nnN_32c" [Param CInt "test"] (Block []))])
-        `shouldBe` Right ()
+        `shouldBe` Right (TUnit [GDecl (Decl CInt "test")
+                       , FDef (Func CVoid "nnN_32c" [Param CInt "test"] (Block []))])
 
 -- expressions
   describe "Expr" $ do
     describe "Binops" $ do
       describe "Add" $
         it "two ints are ok" $
-          exprTest (BinOp Add (IntConst 5) (IntConst 0)) `shouldBe` Right CInt
+          exprTest (BinOp Add (IntConst 5) (IntConst 0)) `shouldBe` Right ((BinOp Add (IntConst 5) (IntConst 0)), CInt)
 
     describe "Binops" $ do
       describe "Mul" $
         it "int and char are ok" $
-          exprTest (BinOp Mul (IntConst 5) (CharConst 'a')) `shouldBe` Right CInt
+          exprTest (BinOp Mul (IntConst 5) (CharConst 'a')) `shouldBe` Right ((BinOp Mul (IntConst 5) (CharConst 'a')), CInt)
 
