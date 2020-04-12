@@ -44,6 +44,7 @@ data Stmt
 data Expr
   = Var Id
   | IntConst Int
+  | CharConst Char
   | Add Expr Expr
   | Subtr Expr Expr
   | Mul Expr Expr
@@ -56,6 +57,7 @@ data Expr
 
 data Type
   = CInt
+  | CChar
   | CVoid
   deriving (Eq, Show)
 

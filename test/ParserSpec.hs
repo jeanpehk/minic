@@ -41,6 +41,9 @@ spec = do
       parse tpe "" `shouldFailOn` "void214d"
     it "doesn't allow any underscore after 'd'" $
       parse tpe "" `shouldFailOn` "void_"
+  describe "char" $ do
+    it "parses as char" $
+      parse tpe "" "char" `shouldParse` CChar
 
 -- expressions
 
@@ -54,6 +57,11 @@ spec = do
   describe "expr with assignment" $ do
     it "should parse with assignment as lowest prec" $
       parse expr "" "a=3+2" `shouldParse` ans
+
+  let ans = Assign "abcd" (CharConst 'k')
+  describe "assignment to char" $ do
+    it "should parse" $
+      parse expr "" "abcd='k'" `shouldParse` ans
 
   let ans = Lt (Add (IntConst 2) (IntConst 3)) (IntConst 4)
   describe "expr with comp ops" $ do

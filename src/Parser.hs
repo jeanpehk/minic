@@ -8,10 +8,13 @@ import Text.Megaparsec
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
 
--- This module contains the entire Parser for minic.
+------------------------------------------------------------
+-- Parser for minic.
 
--- The Parser assumes no white space or comments before tokens, and consumes
--- all white space and comments after it.
+-- The Parser assumes no white space or comments before
+-- tokens, and consumes all white space and comments after it.
+
+------------------------------------------------------------
 
 type Parser = Parsec Void String
 
@@ -34,7 +37,7 @@ lexeme = L.lexeme skip
 symbol :: String -> Parser String
 symbol = L.symbol skip
 
--- Match single char
+-- Match single int
 int :: Parser Int
 int = lexeme L.decimal
 
@@ -42,9 +45,14 @@ int = lexeme L.decimal
 variable :: Parser Expr
 variable = Var <$> identifier
 
+-- character constant, e.g 'k'
+charConst :: Parser Char
+charConst = lexeme $ between (symbol "'") (symbol "'") $ (lowerChar <|> upperChar)
+
 -- Parses a constant
 constant :: Parser Expr
 constant = IntConst <$> int
+        <|> CharConst <$> charConst
 
 -- Helper to parse something between parentheses
 parens :: Parser a -> Parser a
@@ -185,6 +193,7 @@ nullStmt = Null <$ (lexeme (char ';'))
 --      | 'void' ;
 tpe :: Parser Type
 tpe =  CInt  <$ lexeme (chunk "int" <* notFollowedBy (idStart <|> idRest))
+   <|> CChar <$ lexeme (chunk "char" <* notFollowedBy (idStart <|> idRest))
    <|> CVoid <$ lexeme (chunk "void" <* notFollowedBy (idStart <|> idRest))
 
 -- Parses a starting character of an identifier

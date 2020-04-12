@@ -5,7 +5,13 @@ import Control.Monad.Except
 import Control.Monad.State
 import qualified Data.Map as Map
 
--- This module contains type and context checking for minic.
+-- Type and context checking for minic.
+
+------------------------------------------------------------
+-- Datatypes
+------------------------------------------------------------
+
+type Checker a = ExceptT Error (State Env) a
 
 data SymbolTable = ST { getSt :: Map.Map Id Type }
   deriving (Eq, Show)
@@ -22,20 +28,13 @@ data Error
   | SError String            -- Syntax errors
   deriving (Eq, Show)
 
+------------------------------------------------------------
+-- Helper functions for Checker
+------------------------------------------------------------
+
 -- Error text for declaration errors
 dError :: Id -> String
 dError id = "id: '" ++ id ++ "' already declared"
-
--- Datatype for the checker
--- Except for error handling and
--- State to contain the environment
-type Checker a = ExceptT Error (State Env) a
-
--- Run the checker
-runChecker :: TUnit -> (Either Error (), Env)
-runChecker tunit = (runState . runExceptT) (checkTu tunit) env
-  where
-    env = Env { active = ST Map.empty, blocks = [], used = [] }
 
 -- Add a new identifier into the environment
 addId :: Type -> Id -> Env -> Env
@@ -75,13 +74,46 @@ getDeclaredId id env = case Map.lookup id st of
 getId :: Id -> Env -> Maybe Type
 getId id env = Map.lookup id (getSt (active env))
 
--- Check translation unit
+-- Helper for checking binops
+binops :: Expr -> Expr -> Checker Type
+binops e1 e2 = do
+  t1 <- checkExpr e1
+  t2 <- checkExpr e2
+  case compareTypes t1 t2 of
+    Left err -> throwError err
+    Right x  -> return x
+
+------------------------------------------------------------
+-- Type comparions
+------------------------------------------------------------
+
+compareTypes :: Type -> Type -> Either Error Type
+compareTypes (CInt) (CInt) = Right CInt
+compareTypes (CChar) (CChar) = Right CInt
+compareTypes (CChar) (CInt) = Right CInt
+compareTypes (CInt) (CChar) = Right CInt
+compareTypes (CVoid) _ = Left $ TError "Cannot combine Void with another type"
+compareTypes _ (CVoid) = Left $ TError "Cannot combine Void with another type"
+
+------------------------------------------------------------
+-- Check program
+------------------------------------------------------------
+runChecker :: TUnit -> (Either Error (), Env)
+runChecker tunit = (runState . runExceptT) (checkTu tunit) env
+  where
+    env = Env { active = ST Map.empty, blocks = [], used = [] }
+
+------------------------------------------------------------
+-- Translation unit
+------------------------------------------------------------
 checkTu :: TUnit -> Checker ()
 checkTu (TUnit tl) = do
-  mapM checkTl tl
+  tls <- mapM checkTl tl
   return ()
 
--- Check top-level
+------------------------------------------------------------
+-- Top-level
+------------------------------------------------------------
 checkTl :: TL -> Checker ()
 checkTl (GDecl (Decl CVoid _)) = throwError $ SError "Void cannot have an identifier"
 checkTl (GDecl (Decl tpe id)) = do
@@ -91,7 +123,9 @@ checkTl (GDecl (Decl tpe id)) = do
     Just x  -> throwError $ TError (dError id)
   return ()
 
--- Check function
+------------------------------------------------------------
+-- Function
+------------------------------------------------------------
 checkTl (FDef (Func tpe id params block)) = do
   env <- get
   -- Add id first into top level declarations before creating a new block
@@ -104,12 +138,14 @@ checkTl (FDef (Func tpe id params block)) = do
   let f = \y -> case y of
             Left d  -> checkDecl d
             Right s -> checkStmt s
-  mapM f (getBlock block)
+  bls <- mapM f (getBlock block)
   nnenv <- get
   put $ dropBlock nnenv
   return ()
 
--- Check parameters
+------------------------------------------------------------
+-- Parameters
+------------------------------------------------------------
 checkParam :: Param -> Checker ()
 checkParam (Param CVoid _) = throwError $ TError "Void param cannot have an identifier"
 checkParam (ParamNoId CVoid) = return ()
@@ -120,7 +156,9 @@ checkParam (Param tpe id) = do
     Nothing -> put $ addId tpe id env
     Just x  -> throwError $ TError (dError id)
 
--- Check a block
+------------------------------------------------------------
+-- Block
+------------------------------------------------------------
 checkBlock :: Block -> Checker ()
 checkBlock (Block ds) = do
   env <- get
@@ -129,12 +167,14 @@ checkBlock (Block ds) = do
              Left d  -> checkDecl d
              Right s -> checkStmt s
   get
-  mapM f ds
+  bls <- mapM f ds
   nnenv <- get
   put $ dropBlock nnenv
   return ()
 
--- Checks for statements
+------------------------------------------------------------
+-- Statements
+------------------------------------------------------------
 checkStmt :: Stmt -> Checker ()
 checkStmt (BlockStmt b) = checkBlock b
 checkStmt (ExprStmt e) = do
@@ -151,7 +191,9 @@ checkStmt (While e s) = do
   return ()
 checkStmt Null = return ()
 
--- Checks for declarations
+------------------------------------------------------------
+-- Declarations
+------------------------------------------------------------
 checkDecl :: Decl -> Checker ()
 checkDecl (Decl CVoid _ ) = throwError $ SError "Void cannot have an identifier"
 checkDecl (Decl tpe id) = do
@@ -160,7 +202,9 @@ checkDecl (Decl tpe id) = do
     Nothing -> put $ addId tpe id env
     Just x  -> throwError $ TError (dError id)
 
--- Checks for expressions
+------------------------------------------------------------
+-- Expressions
+------------------------------------------------------------
 checkExpr :: Expr -> Checker Type
 checkExpr (Var id) = do
   env <- get
@@ -169,6 +213,7 @@ checkExpr (Var id) = do
     Just x  -> return x
 
 checkExpr (IntConst i)  = return CInt
+checkExpr (CharConst c) = return CChar
 checkExpr (Subtr e1 e2) = binops e1 e2
 checkExpr (Add e1 e2)   = binops e1 e2
 checkExpr (Mul e1 e2)   = binops e1 e2
@@ -185,21 +230,4 @@ checkExpr (Assign id e) = do
       case compareTypes x etype of
         Left err -> throwError err
         Right x  -> return x
-
--- Helper for checking binops
-binops :: Expr -> Expr -> Checker Type
-binops e1 e2 = do
-  t1 <- checkExpr e1
-  t2 <- checkExpr e2
-  case compareTypes t1 t2 of
-    Left err -> throwError err
-    Right x  -> return x
-
--- Type comparisons
--- If types mismatch coerces them if possible
--- otherwise returns an error.
-compareTypes :: Type -> Type -> Either Error Type
-compareTypes (CInt) (CInt) = Right CInt
-compareTypes (CVoid) _ = Left $ TError "Cannot combine Void with another type"
-compareTypes _ (CVoid) = Left $ TError "Cannot combine Void with another type"
 

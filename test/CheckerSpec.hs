@@ -93,3 +93,8 @@ spec = do
         it "two ints are ok" $
           exprTest (Add (IntConst 5) (IntConst 0)) `shouldBe` Right CInt
 
+    describe "Binops" $ do
+      describe "Mul" $
+        it "int and char are ok" $
+          exprTest (Mul (IntConst 5) (CharConst 'a')) `shouldBe` Right CInt
+
