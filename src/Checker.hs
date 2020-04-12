@@ -98,6 +98,7 @@ compareTypes _ (CVoid) = Left $ TError "Cannot combine Void with another type"
 ------------------------------------------------------------
 -- Check program
 ------------------------------------------------------------
+
 runChecker :: TUnit -> (Either Error (), Env)
 runChecker tunit = (runState . runExceptT) (checkTu tunit) env
   where
@@ -106,6 +107,7 @@ runChecker tunit = (runState . runExceptT) (checkTu tunit) env
 ------------------------------------------------------------
 -- Translation unit
 ------------------------------------------------------------
+
 checkTu :: TUnit -> Checker ()
 checkTu (TUnit tl) = do
   tls <- mapM checkTl tl
@@ -114,6 +116,7 @@ checkTu (TUnit tl) = do
 ------------------------------------------------------------
 -- Top-level
 ------------------------------------------------------------
+
 checkTl :: TL -> Checker ()
 checkTl (GDecl (Decl CVoid _)) = throwError $ SError "Void cannot have an identifier"
 checkTl (GDecl (Decl tpe id)) = do
@@ -126,6 +129,7 @@ checkTl (GDecl (Decl tpe id)) = do
 ------------------------------------------------------------
 -- Function
 ------------------------------------------------------------
+
 checkTl (FDef (Func tpe id params block)) = do
   env <- get
   -- Add id first into top level declarations before creating a new block
@@ -146,6 +150,7 @@ checkTl (FDef (Func tpe id params block)) = do
 ------------------------------------------------------------
 -- Parameters
 ------------------------------------------------------------
+
 checkParam :: Param -> Checker ()
 checkParam (Param CVoid _) = throwError $ TError "Void param cannot have an identifier"
 checkParam (ParamNoId CVoid) = return ()
@@ -159,6 +164,7 @@ checkParam (Param tpe id) = do
 ------------------------------------------------------------
 -- Block
 ------------------------------------------------------------
+
 checkBlock :: Block -> Checker ()
 checkBlock (Block ds) = do
   env <- get
@@ -175,25 +181,36 @@ checkBlock (Block ds) = do
 ------------------------------------------------------------
 -- Statements
 ------------------------------------------------------------
+
+-- Block
 checkStmt :: Stmt -> Checker ()
 checkStmt (BlockStmt b) = checkBlock b
+
+-- Expression
 checkStmt (ExprStmt e) = do
   checkExpr e
   return ()
+
+-- IfElse
 checkStmt (IfElse e1 s1 s2) = do
   checkExpr e1
   checkStmt s1
   checkStmt s2
   return ()
+
+-- While
 checkStmt (While e s) = do
   checkExpr e
   checkStmt s
   return ()
+
+-- Null
 checkStmt Null = return ()
 
 ------------------------------------------------------------
 -- Declarations
 ------------------------------------------------------------
+
 checkDecl :: Decl -> Checker ()
 checkDecl (Decl CVoid _ ) = throwError $ SError "Void cannot have an identifier"
 checkDecl (Decl tpe id) = do
@@ -205,6 +222,8 @@ checkDecl (Decl tpe id) = do
 ------------------------------------------------------------
 -- Expressions
 ------------------------------------------------------------
+
+-- Variable
 checkExpr :: Expr -> Checker Type
 checkExpr (Var id) = do
   env <- get
@@ -212,15 +231,19 @@ checkExpr (Var id) = do
     Nothing -> throwError $ TError (dError id)
     Just x  -> return x
 
+-- Constants
 checkExpr (IntConst i)  = return CInt
 checkExpr (CharConst c) = return CChar
-checkExpr (Subtr e1 e2) = binops e1 e2
-checkExpr (Add e1 e2)   = binops e1 e2
-checkExpr (Mul e1 e2)   = binops e1 e2
-checkExpr (Div e1 e2)   = binops e1 e2
-checkExpr (Lt e1 e2)    = binops e1 e2
-checkExpr (Gt e1 e2)    = binops e1 e2
-checkExpr (Eq e1 e2)    = binops e1 e2
+
+-- BinOps
+checkExpr (BinOp op e1 e2) = do
+  ce1 <- checkExpr e1
+  ce2 <- checkExpr e2
+  case compareTypes ce1 ce2 of
+    Left err -> throwError err
+    Right x  -> return x
+
+-- Assignment
 checkExpr (Assign id e) = do
   env <- get
   case getDeclaredId id env of

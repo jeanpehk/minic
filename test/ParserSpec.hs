@@ -47,13 +47,13 @@ spec = do
 
 -- expressions
 
-  let ans = Subtr (Add (Mul (IntConst 2) (IntConst 3)) (IntConst 2))
-                     (Div (IntConst 33) (IntConst 25))
+  let ans = BinOp Subtr (BinOp Add (BinOp Mul (IntConst 2) (IntConst 3)) (IntConst 2))
+                     (BinOp Div (IntConst 33) (IntConst 25))
   describe "expr with arith ops" $ do
     it "should parse with correct precedence" $
       parse expr "" "2*3+2-33/25" `shouldParse` ans
 
-  let ans = Assign "a" (Add (IntConst 3) (IntConst 2))
+  let ans = Assign "a" (BinOp Add (IntConst 3) (IntConst 2))
   describe "expr with assignment" $ do
     it "should parse with assignment as lowest prec" $
       parse expr "" "a=3+2" `shouldParse` ans
@@ -63,7 +63,7 @@ spec = do
     it "should parse" $
       parse expr "" "abcd='k'" `shouldParse` ans
 
-  let ans = Lt (Add (IntConst 2) (IntConst 3)) (IntConst 4)
+  let ans = BinOp Lt (BinOp Add (IntConst 2) (IntConst 3)) (IntConst 4)
   describe "expr with comp ops" $ do
     it "should parse comparisons as lower prec than arith ops" $
       parse expr "" "2 + 3 < 4" `shouldParse` ans
@@ -73,28 +73,28 @@ spec = do
     it "should parse assignments as right assoc" $
       parse expr "" "a=b=c=4" `shouldParse` ans
 
-  let ans = Mul (Add (IntConst 2) (IntConst 2)) (Add (IntConst 3) (IntConst 1))
+  let ans = BinOp Mul (BinOp Add (IntConst 2) (IntConst 2)) (BinOp Add (IntConst 3) (IntConst 1))
   describe "expr with parentheses and extra spaces in between and end" $ do
     it "should parse correctly" $
       parse (expr <* eof) "" "(2+2) * (3+1)  " `shouldParse` ans
 
   describe "longer munch rule: equality over assignment" $ do
     it "should parse as eq expr" $
-      parse expr  "" "a==3" `shouldParse` Eq (Var "a") (IntConst 3)
+      parse expr  "" "a==3" `shouldParse` BinOp Eq (Var "a") (IntConst 3)
 
 -- statements
 
-  let ans = While (Lt (Var "myvar") (IntConst 3)) (ExprStmt (Assign "myvar" (IntConst 3)))
+  let ans = While (BinOp Lt (Var "myvar") (IntConst 3)) (ExprStmt (Assign "myvar" (IntConst 3)))
   describe "while stmt" $ do
     it "should parse with LT expr and ExprStmt" $
       parse stmt "" "while (myvar < 3) myvar = 3;" `shouldParse` ans
 
-  let ans = While (Eq (IntConst 2) (IntConst 3)) Null
+  let ans = While (BinOp Eq (IntConst 2) (IntConst 3)) Null
   describe "while with random spaces and a null stmt" $ do
     it "should parse with EQ expr and ExprStmt" $
       parse stmt "" "while  (  2 ==   3  ) ;" `shouldParse` ans
 
-  let ans = IfElse (Eq (Var "abcd") (IntConst 5))
+  let ans = IfElse (BinOp Eq (Var "abcd") (IntConst 5))
                    (ExprStmt (Assign "abcd" (IntConst 6)))
                    (ExprStmt (Assign "abcd" (IntConst 7)))
   describe "if else statement" $ do

@@ -258,47 +258,18 @@ genExpr (Mc.Var id) = do
 -- Int Constant
 genExpr (Mc.IntConst int) = return $ constInt32 int
 
--- Addition
-genExpr (Mc.Add e ee) = do
+-- BinOps
+genExpr (Mc.BinOp op e ee) = do
   e1 <- genExpr e
   e2 <- genExpr ee
-  IR.add e1 e2
-
--- Subtraction
-genExpr (Mc.Subtr e ee) = do
-  e1 <- genExpr e
-  e2 <- genExpr ee
-  IR.sub e1 e2
-
--- Multiplication
-genExpr (Mc.Mul e ee) = do
-  e1 <- genExpr e
-  e2 <- genExpr ee
-  IR.mul e1 e2
-
--- Division
-genExpr (Mc.Div e ee) = do
-  e1 <- genExpr e
-  e2 <- genExpr ee
-  IR.sdiv e1 e2
-
--- LT
-genExpr (Mc.Lt e ee) = do
-  e1 <- genExpr e
-  e2 <- genExpr ee
-  IR.icmp AST.SLT e1 e2
-
--- GT
-genExpr (Mc.Gt e ee) = do
-  e1 <- genExpr e
-  e2 <- genExpr ee
-  IR.icmp AST.SGT e1 e2
-
--- EQ
-genExpr (Mc.Eq e ee) = do
-  e1 <- genExpr e
-  e2 <- genExpr ee
-  IR.icmp AST.EQ e1 e2
+  case op of
+    Mc.Add   -> IR.add e1 e2
+    Mc.Subtr -> IR.sub e1 e2
+    Mc.Mul   -> IR.mul e1 e2
+    Mc.Div   -> IR.sdiv e1 e2
+    Mc.Lt    -> IR.icmp AST.SLT e1 e2
+    Mc.Gt    -> IR.icmp AST.SGT e1 e2
+    Mc.Eq    -> IR.icmp AST.EQ e1 e2
 
 -- Assignment
 genExpr (Mc.Assign id expr) = do

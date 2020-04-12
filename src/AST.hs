@@ -45,14 +45,18 @@ data Expr
   = Var Id
   | IntConst Int
   | CharConst Char
-  | Add Expr Expr
-  | Subtr Expr Expr
-  | Mul Expr Expr
-  | Div Expr Expr
-  | Lt Expr Expr
-  | Gt Expr Expr
-  | Eq Expr Expr
+  | BinOp Op Expr Expr
   | Assign Id Expr
+  deriving (Eq, Show)
+
+data Op
+  = Add
+  | Subtr
+  | Mul
+  | Div
+  | Lt
+  | Gt
+  | Eq
   deriving (Eq, Show)
 
 data Type

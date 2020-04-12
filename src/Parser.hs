@@ -75,13 +75,13 @@ binary op f = InfixL $ f <$ symbol op
 operatorTable :: [[Operator Parser Expr]]
 operatorTable =
   [
-    [ binary "*" Mul
-    , binary "/" Div],
-    [ binary "+" Add
-    , binary "-" Subtr],
-    [ binary "<" Lt
-    , binary ">" Gt],
-    [binary "==" Eq]
+    [ binary "*" (BinOp Mul)
+    , binary "/" (BinOp Div)],
+    [ binary "+" (BinOp Add)
+    , binary "-" (BinOp Subtr)],
+    [ binary "<" (BinOp Lt)
+    , binary ">" (BinOp Gt)],
+    [binary "==" (BinOp Eq)]
   ]
 
 -- Parser an lvalue for assignment expressions
