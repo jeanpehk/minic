@@ -34,8 +34,8 @@ main :: IO ()
 main = do
   args <- getArgs
   case args of
-    [] -> repl
-    [fn] -> handleProg fn
+    []     -> repl
+    (x:xs) -> handleProg x
 
 -- Handle given program.
 handleProg fn = do

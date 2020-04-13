@@ -8,6 +8,7 @@ module LLVMGen where
 import Data.Text.Lazy.IO as T
 import qualified Data.Text.Lazy as L
 
+import Data.Char
 import Data.String
 import Data.Word
 
@@ -51,6 +52,7 @@ constInt32 n = AST.ConstantOperand $ AST.Int (fromIntegral 32) (fromIntegral n)
 -- Change type from own AST into LLVM
 decideType :: Mc.Type -> AST.Type
 decideType Mc.CInt = AST.i32
+decideType Mc.CChar = AST.i8
 decideType Mc.CVoid = AST.void
 
 -- Simple test function
@@ -67,7 +69,10 @@ test = do
 
 -- Turns a minic param into llvm param
 mkParam :: Mc.Param -> (AST.Type, IR.ParameterName)
-mkParam (Mc.Param tpe id) = (decideType tpe, IR.ParameterName (fromString id))
+mkParam (Mc.Param Mc.CInt id)   = (AST.i32, IR.ParameterName (fromString id))
+mkParam (Mc.Param Mc.CChar id)  = (AST.i8, IR.ParameterName (fromString id))
+mkParam (Mc.ParamNoId _)        = error "TODO"
+mkParam (Mc.Param Mc.CVoid _)   = error "Can't have param with void type and id"
 
 -- Add params to Symbol Table
 paramsToST :: ST -> [Mc.Param] -> [AST.Operand] -> ST
@@ -141,21 +146,25 @@ codeGen (Mc.TUnit tls) = do
 genGlobalDecl :: (MonadState Names m, IR.MonadModuleBuilder m)
         => Mc.Decl
         -> m AST.Operand
-genGlobalDecl (Mc.Decl Mc.CInt id) = do
+genGlobalDecl (Mc.Decl Mc.CVoid id) = error "Can't have void decl with id"
+genGlobalDecl (Mc.Decl tpe id) = do
   st <- get
-  d <- IR.global (AST.mkName id) AST.i32 (AST.Int (fromIntegral 32) 0)
+  d <- IR.global (AST.mkName id) (decideType tpe) (AST.Int (fromIntegral 32) 0)
   put $ Names { active = addToActive (active st) id d, rest = rest st}
   return d
+
 
 genDecl :: (MonadState Names m, IR.MonadModuleBuilder m, IR.MonadIRBuilder m)
         => Mc.Decl
         -> m ()
-genDecl (Mc.Decl Mc.CInt id) = do
+genDecl (Mc.Decl tpe id) = do
   st <- get
-  d <- IR.alloca AST.i32 Nothing 8
-  put $ Names { active = addToActive (active st) id d, rest = rest st}
+  d <- case tpe of
+    Mc.CInt  -> IR.alloca AST.i32 Nothing 8
+    Mc.CChar -> IR.alloca AST.i8 Nothing 1
+    Mc.CVoid -> error "Can't have void decl with id"
+  put $ Names { active = addToActive (active st) id d, rest = rest st }
   return ()
-
 
 ------------------------------------------------------------
 -- Functions
@@ -257,6 +266,9 @@ genExpr (Mc.Var id) = do
 
 -- Int Constant
 genExpr (Mc.IntConst int) = return $ constInt32 int
+
+-- Char Constant
+genExpr (Mc.CharConst char) = return $ IR.int8 $ toInteger $ ord char
 
 -- BinOps
 genExpr (Mc.BinOp op e ee) = do
