@@ -29,7 +29,7 @@ data Decl
   deriving (Eq, Show)
 
 data Param
-  = Param { getPType :: Type, getPID :: Id }
+  = Param { getType :: Type, getPID :: Id}
   | ParamNoId Type
   deriving (Eq, Show)
 
@@ -63,6 +63,7 @@ data Type
   = CInt
   | CChar
   | CVoid
+  | CIntP
   deriving (Eq, Show)
 
 type Id

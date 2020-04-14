@@ -44,6 +44,9 @@ spec = do
   describe "char" $ do
     it "parses as char" $
       parse tpe "" "char" `shouldParse` CChar
+  describe "pointer int" $ do
+    it "parses" $
+      parse tpe "" "int *" `shouldParse` CIntP
 
 -- expressions
 
@@ -57,6 +60,11 @@ spec = do
   describe "expr with assignment" $ do
     it "should parse with assignment as lowest prec" $
       parse expr "" "a=3+2" `shouldParse` ans
+
+  let ans = CharConst 'u'
+  describe "character constant" $ do
+    it "should parse" $
+      parse expr "" "'u'" `shouldParse` ans
 
   let ans = Assign "abcd" (CharConst 'k')
   describe "assignment to char" $ do

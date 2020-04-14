@@ -81,6 +81,11 @@ getId id env = Map.lookup id (getSt (active env))
 compareTypes :: Type -> Type -> Either Error Type
 compareTypes (CInt) (CInt) = Right CInt
 compareTypes (CChar) (CChar) = Right CInt
+compareTypes (CIntP) (CIntP) = Right CIntP
+compareTypes _ (CIntP) = Left $ TError "Combination of normal types \
+                                        \ with pointers not supported atm"
+compareTypes (CIntP) _ = Left $ TError "Combination of normal types \
+                                        \ with pointers not supported atm"
 compareTypes (CChar) (CInt) = Right CInt
 compareTypes (CInt) (CChar) = Right CInt
 compareTypes (CVoid) _ = Left $ TError "Cannot combine Void with another type"

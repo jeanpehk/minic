@@ -51,9 +51,10 @@ constInt32 n = AST.ConstantOperand $ AST.Int (fromIntegral 32) (fromIntegral n)
 
 -- Change type from own AST into LLVM
 decideType :: Mc.Type -> AST.Type
-decideType Mc.CInt = AST.i32
+decideType Mc.CInt  = AST.i32
 decideType Mc.CChar = AST.i8
 decideType Mc.CVoid = AST.void
+decideType Mc.CIntP = AST.ptr AST.i32
 
 -- Simple test function
 test :: IO ()
@@ -69,10 +70,11 @@ test = do
 
 -- Turns a minic param into llvm param
 mkParam :: Mc.Param -> (AST.Type, IR.ParameterName)
-mkParam (Mc.Param Mc.CInt id)   = (AST.i32, IR.ParameterName (fromString id))
-mkParam (Mc.Param Mc.CChar id)  = (AST.i8, IR.ParameterName (fromString id))
-mkParam (Mc.ParamNoId _)        = error "TODO"
-mkParam (Mc.Param Mc.CVoid _)   = error "Can't have param with void type and id"
+mkParam (Mc.Param Mc.CInt id)    = (AST.i32, IR.ParameterName (fromString id))
+mkParam (Mc.Param Mc.CChar id)   = (AST.i8, IR.ParameterName (fromString id))
+mkParam (Mc.Param Mc.CIntP id)   = (AST.ptr AST.i32, IR.ParameterName (fromString id))
+mkParam (Mc.ParamNoId _)         = error "TODO"
+mkParam (Mc.Param Mc.CVoid _)    = error "Can't have param with void type and id"
 
 -- Add params to Symbol Table
 paramsToST :: ST -> [Mc.Param] -> [AST.Operand] -> ST
@@ -123,7 +125,6 @@ runGen nm tunit = runState (IR.buildModuleT (fromString nm) (codeGen tunit)) ns
   where
     ns = Names { active = ST Map.empty, rest = [] }
 
-
 ------------------------------------------------------------
 -- Translation units
 ------------------------------------------------------------
@@ -163,6 +164,7 @@ genDecl (Mc.Decl tpe id) = do
     Mc.CInt  -> IR.alloca AST.i32 Nothing 8
     Mc.CChar -> IR.alloca AST.i8 Nothing 1
     Mc.CVoid -> error "Can't have void decl with id"
+    Mc.CIntP -> IR.alloca (AST.ptr AST.i32) Nothing 8
   put $ Names { active = addToActive (active st) id d, rest = rest st }
   return ()
 
