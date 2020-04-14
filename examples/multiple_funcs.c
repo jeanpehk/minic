@@ -1,6 +1,6 @@
-int ok(int a, int b) {
+int ok() {
 }
 
-int main() {
+int main(int c, int d) {
 }
 

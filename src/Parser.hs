@@ -194,6 +194,7 @@ nullStmt = Null <$ (lexeme (char ';'))
 tpe :: Parser Type
 tpe = try (CIntP <$ lexeme (lexeme (chunk "int") <* symbol "*"))
    <|> (CInt  <$ lexeme (try ((chunk "int" <* notFollowedBy (idStart <|> idRest)))))
+   <|> try (CCharP <$ lexeme (lexeme (chunk "char") <* symbol "*"))
    <|> (CChar <$ lexeme (chunk "char" <* notFollowedBy (idStart <|> idRest)))
    <|> (CVoid <$ lexeme (chunk "void" <* notFollowedBy (idStart <|> idRest)))
 

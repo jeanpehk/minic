@@ -82,9 +82,14 @@ compareTypes :: Type -> Type -> Either Error Type
 compareTypes (CInt) (CInt) = Right CInt
 compareTypes (CChar) (CChar) = Right CInt
 compareTypes (CIntP) (CIntP) = Right CIntP
+compareTypes (CCharP) (CCharP) = Right CCharP
 compareTypes _ (CIntP) = Left $ TError "Combination of normal types \
                                         \ with pointers not supported atm"
 compareTypes (CIntP) _ = Left $ TError "Combination of normal types \
+                                        \ with pointers not supported atm"
+compareTypes _ (CCharP) = Left $ TError "Combination of normal types \
+                                        \ with pointers not supported atm"
+compareTypes (CCharP) _ = Left $ TError "Combination of normal types \
                                         \ with pointers not supported atm"
 compareTypes (CChar) (CInt) = Right CInt
 compareTypes (CInt) (CChar) = Right CInt

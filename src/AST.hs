@@ -64,6 +64,7 @@ data Type
   | CChar
   | CVoid
   | CIntP
+  | CCharP
   deriving (Eq, Show)
 
 type Id

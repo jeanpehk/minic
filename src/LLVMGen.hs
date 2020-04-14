@@ -51,10 +51,11 @@ constInt32 n = AST.ConstantOperand $ AST.Int (fromIntegral 32) (fromIntegral n)
 
 -- Change type from own AST into LLVM
 decideType :: Mc.Type -> AST.Type
-decideType Mc.CInt  = AST.i32
-decideType Mc.CChar = AST.i8
-decideType Mc.CVoid = AST.void
-decideType Mc.CIntP = AST.ptr AST.i32
+decideType Mc.CInt   = AST.i32
+decideType Mc.CChar  = AST.i8
+decideType Mc.CVoid  = AST.void
+decideType Mc.CIntP  = AST.ptr AST.i32
+decideType Mc.CCharP = AST.ptr AST.i8
 
 -- Simple test function
 test :: IO ()
@@ -70,11 +71,12 @@ test = do
 
 -- Turns a minic param into llvm param
 mkParam :: Mc.Param -> (AST.Type, IR.ParameterName)
-mkParam (Mc.Param Mc.CInt id)    = (AST.i32, IR.ParameterName (fromString id))
-mkParam (Mc.Param Mc.CChar id)   = (AST.i8, IR.ParameterName (fromString id))
-mkParam (Mc.Param Mc.CIntP id)   = (AST.ptr AST.i32, IR.ParameterName (fromString id))
-mkParam (Mc.ParamNoId _)         = error "TODO"
-mkParam (Mc.Param Mc.CVoid _)    = error "Can't have param with void type and id"
+mkParam (Mc.Param Mc.CInt id)     = (AST.i32, IR.ParameterName (fromString id))
+mkParam (Mc.Param Mc.CChar id)    = (AST.i8, IR.ParameterName (fromString id))
+mkParam (Mc.Param Mc.CIntP id)    = (AST.ptr AST.i32, IR.ParameterName (fromString id))
+mkParam (Mc.Param Mc.CCharP id)   = (AST.ptr AST.i8, IR.ParameterName (fromString id))
+mkParam (Mc.ParamNoId _)          = error "TODO"
+mkParam (Mc.Param Mc.CVoid _)     = error "Can't have param with void type and id"
 
 -- Add params to Symbol Table
 paramsToST :: ST -> [Mc.Param] -> [AST.Operand] -> ST
@@ -161,10 +163,11 @@ genDecl :: (MonadState Names m, IR.MonadModuleBuilder m, IR.MonadIRBuilder m)
 genDecl (Mc.Decl tpe id) = do
   st <- get
   d <- case tpe of
-    Mc.CInt  -> IR.alloca AST.i32 Nothing 8
-    Mc.CChar -> IR.alloca AST.i8 Nothing 1
-    Mc.CVoid -> error "Can't have void decl with id"
-    Mc.CIntP -> IR.alloca (AST.ptr AST.i32) Nothing 8
+    Mc.CInt   -> IR.alloca AST.i32 Nothing 8
+    Mc.CChar  -> IR.alloca AST.i8 Nothing 1
+    Mc.CVoid  -> error "Can't have void decl with id"
+    Mc.CIntP  -> IR.alloca (AST.ptr AST.i32) Nothing 8
+    Mc.CCharP -> IR.alloca (AST.ptr AST.i8) Nothing 8
   put $ Names { active = addToActive (active st) id d, rest = rest st }
   return ()
 
@@ -300,7 +303,7 @@ genExpr (Mc.Assign id expr) = do
 genParam ((Mc.Param _ id), (AST.LocalReference tpe nm)) = do
   st <- get
   let op = idFromNames id st
-  addr <- IR.alloca tpe (Just op) 8
+  addr <- IR.alloca tpe Nothing 8
   IR.store addr 8 op
   return addr
 genParam _ = error "There should be only local refs in params"
