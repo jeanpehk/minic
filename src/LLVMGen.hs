@@ -54,8 +54,7 @@ decideType :: Mc.Type -> AST.Type
 decideType Mc.CInt   = AST.i32
 decideType Mc.CChar  = AST.i8
 decideType Mc.CVoid  = AST.void
-decideType Mc.CIntP  = AST.ptr AST.i32
-decideType Mc.CCharP = AST.ptr AST.i8
+decideType (Mc.Pntr p) = AST.ptr (decideType p)
 
 -- Simple test function
 test :: IO ()
@@ -73,8 +72,8 @@ test = do
 mkParam :: Mc.Param -> (AST.Type, IR.ParameterName)
 mkParam (Mc.Param Mc.CInt id)     = (AST.i32, IR.ParameterName (fromString id))
 mkParam (Mc.Param Mc.CChar id)    = (AST.i8, IR.ParameterName (fromString id))
-mkParam (Mc.Param Mc.CIntP id)    = (AST.ptr AST.i32, IR.ParameterName (fromString id))
-mkParam (Mc.Param Mc.CCharP id)   = (AST.ptr AST.i8, IR.ParameterName (fromString id))
+mkParam (Mc.Param (Mc.Pntr p) id) =
+  (decideType (Mc.Pntr p), IR.ParameterName (fromString id))
 mkParam (Mc.ParamNoId _)          = error "TODO"
 mkParam (Mc.Param Mc.CVoid _)     = error "Can't have param with void type and id"
 
@@ -163,11 +162,10 @@ genDecl :: (MonadState Names m, IR.MonadModuleBuilder m, IR.MonadIRBuilder m)
 genDecl (Mc.Decl tpe id) = do
   st <- get
   d <- case tpe of
-    Mc.CInt   -> IR.alloca AST.i32 Nothing 8
+    Mc.CInt   -> IR.alloca AST.i32 Nothing 4
     Mc.CChar  -> IR.alloca AST.i8 Nothing 1
     Mc.CVoid  -> error "Can't have void decl with id"
-    Mc.CIntP  -> IR.alloca (AST.ptr AST.i32) Nothing 8
-    Mc.CCharP -> IR.alloca (AST.ptr AST.i8) Nothing 8
+    Mc.Pntr p -> IR.alloca (decideType (Mc.Pntr p)) Nothing 8
   put $ Names { active = addToActive (active st) id d, rest = rest st }
   return ()
 

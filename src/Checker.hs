@@ -75,24 +75,20 @@ getId :: Id -> Env -> Maybe Type
 getId id env = Map.lookup id (getSt (active env))
 
 ------------------------------------------------------------
--- Type comparisons
+-- Type comparisons for expressions
 ------------------------------------------------------------
 
 compareTypes :: Type -> Type -> Either Error Type
 compareTypes (CInt) (CInt) = Right CInt
 compareTypes (CChar) (CChar) = Right CInt
-compareTypes (CIntP) (CIntP) = Right CIntP
-compareTypes (CCharP) (CCharP) = Right CCharP
-compareTypes _ (CIntP) = Left $ TError "Combination of normal types \
-                                        \ with pointers not supported atm"
-compareTypes (CIntP) _ = Left $ TError "Combination of normal types \
-                                        \ with pointers not supported atm"
-compareTypes _ (CCharP) = Left $ TError "Combination of normal types \
-                                        \ with pointers not supported atm"
-compareTypes (CCharP) _ = Left $ TError "Combination of normal types \
-                                        \ with pointers not supported atm"
 compareTypes (CChar) (CInt) = Right CInt
 compareTypes (CInt) (CChar) = Right CInt
+compareTypes (Pntr a) (Pntr b) =
+  case compareTypes a b of
+    Left err -> Left err
+    Right t  -> Right $ Pntr t
+compareTypes _ (Pntr _) = Left $ TError "Cannot combine ptr with non ptr"
+compareTypes (Pntr _) _ = Left $ TError "Cannot combine ptr with non ptr"
 compareTypes (CVoid) _ = Left $ TError "Cannot combine Void with another type"
 compareTypes _ (CVoid) = Left $ TError "Cannot combine Void with another type"
 

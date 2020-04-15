@@ -46,7 +46,10 @@ spec = do
       parse tpe "" "char" `shouldParse` CChar
   describe "pointer int" $ do
     it "parses" $
-      parse tpe "" "int *" `shouldParse` CIntP
+      parse tpe "" "int *" `shouldParse` Pntr (CInt)
+  describe "pointer to pointer void" $ do
+    it "parses" $
+      parse tpe "" "void * *" `shouldParse` Pntr (Pntr CVoid)
 
 -- expressions
 

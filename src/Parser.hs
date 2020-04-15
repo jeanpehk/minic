@@ -192,9 +192,13 @@ nullStmt = Null <$ (lexeme (char ';'))
 -- type : 'int'
 --      | 'void' ;
 tpe :: Parser Type
-tpe = try (CIntP <$ lexeme (lexeme (chunk "int") <* symbol "*"))
-   <|> (CInt  <$ lexeme (try ((chunk "int" <* notFollowedBy (idStart <|> idRest)))))
-   <|> try (CCharP <$ lexeme (lexeme (chunk "char") <* symbol "*"))
+tpe = do
+  tp <- nonPtrs
+  foldr (const Pntr) tp <$> (many (symbol "*"))
+
+nonPtrs :: Parser Type
+nonPtrs =
+   (CInt  <$ lexeme (try ((chunk "int" <* notFollowedBy (idStart <|> idRest)))))
    <|> (CChar <$ lexeme (chunk "char" <* notFollowedBy (idStart <|> idRest)))
    <|> (CVoid <$ lexeme (chunk "void" <* notFollowedBy (idStart <|> idRest)))
 

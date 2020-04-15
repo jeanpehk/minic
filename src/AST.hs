@@ -63,8 +63,7 @@ data Type
   = CInt
   | CChar
   | CVoid
-  | CIntP
-  | CCharP
+  | Pntr Type
   deriving (Eq, Show)
 
 type Id
