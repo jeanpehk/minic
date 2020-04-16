@@ -34,9 +34,9 @@ import qualified LLVM.IRBuilder.Monad as IR
 -- Datatypes
 ------------------------------------------------------------
 
-type Generator = IR.ModuleBuilderT (State Names)
+type Generator = IR.ModuleBuilderT (State Env)
 
-data Names = Names { active :: ST, rest :: [ST] }
+data Env = Env { active :: ST, rest :: [ST], funcHasRet :: Bool }
   deriving (Eq, Show)
 
 newtype ST = ST { getST :: Map.Map String AST.Operand }
@@ -90,27 +90,29 @@ addToActive st id op = case Map.lookup id (getST st) of
                            Nothing -> ST $ Map.insert id op (getST st)
                            Just x  -> error $ "Id: " ++ id ++ " already declared"
 
--- New active for Names to avoid name collisions
+-- New active for Env to avoid name collisions
 -- when moving into a new block in the source language.
-newActive :: Names -> Names
-newActive ns = Names { active = ST Map.empty, rest = active ns:rest ns }
+newActive :: Env -> Env
+newActive ns = Env { active = ST Map.empty, rest = active ns:rest ns
+                     , funcHasRet = funcHasRet ns }
 
--- Drop active ST from Names when moving out of a block
+-- Drop active ST from Env when moving out of a block
 -- in the source language.
-dropActive :: Names -> Names
+dropActive :: Env -> Env
 dropActive ns = case rest ns of
-                  []     -> Names { active = ST Map.empty, rest = [] }
-                  (x:xs) -> Names { active = x, rest = xs }
+                  []     -> Env { active = ST Map.empty, rest = []
+                                , funcHasRet = funcHasRet ns }
+                  (x:xs) -> Env { active = x, rest = xs, funcHasRet = funcHasRet ns }
 
-idFromNames :: String -> Names -> AST.Operand
-idFromNames id ns = case Map.lookup id (getST (active ns)) of
+idFromEnv :: String -> Env -> AST.Operand
+idFromEnv id ns = case Map.lookup id (getST (active ns)) of
                       Nothing -> lookUpRest (rest ns)
                       Just x  -> x
   where
     lookUpRest (r:rs) = case Map.lookup id (getST r) of
                           Nothing -> lookUpRest rs
                           Just x  -> x
-    lookUpRest [] = error $ "Var: " ++ id ++ " not found in listed Names"
+    lookUpRest [] = error $ "Var: " ++ id ++ " not found in listed Env"
 
 getName :: AST.Operand -> AST.Name
 getName op = case op of
@@ -121,10 +123,10 @@ getName op = case op of
 -- LLVM AST Generation
 ------------------------------------------------------------
 
-runGen :: String -> Mc.TUnit -> (AST.Module, Names)
+runGen :: String -> Mc.TUnit -> (AST.Module, Env)
 runGen nm tunit = runState (IR.buildModuleT (fromString nm) (codeGen tunit)) ns
   where
-    ns = Names { active = ST Map.empty, rest = [] }
+    ns = Env { active = ST Map.empty, rest = [], funcHasRet = False }
 
 ------------------------------------------------------------
 -- Translation units
@@ -145,28 +147,30 @@ codeGen (Mc.TUnit tls) = do
 -- Declarations
 ------------------------------------------------------------
 
-genGlobalDecl :: (MonadState Names m, IR.MonadModuleBuilder m)
+genGlobalDecl :: (MonadState Env m, IR.MonadModuleBuilder m)
         => Mc.Decl
         -> m AST.Operand
 genGlobalDecl (Mc.Decl Mc.CVoid id) = error "Can't have void decl with id"
 genGlobalDecl (Mc.Decl tpe id) = do
-  st <- get
+  env <- get
   d <- IR.global (AST.mkName id) (decideType tpe) (AST.Int (fromIntegral 32) 0)
-  put $ Names { active = addToActive (active st) id d, rest = rest st}
+  put $ Env { active = addToActive (active env) id d, rest = rest env
+            , funcHasRet = funcHasRet env}
   return d
 
 
-genDecl :: (MonadState Names m, IR.MonadModuleBuilder m, IR.MonadIRBuilder m)
+genDecl :: (MonadState Env m, IR.MonadModuleBuilder m, IR.MonadIRBuilder m)
         => Mc.Decl
         -> m ()
 genDecl (Mc.Decl tpe id) = do
-  st <- get
+  env <- get
   d <- case tpe of
     Mc.CInt   -> IR.alloca AST.i32 Nothing 4
     Mc.CChar  -> IR.alloca AST.i8 Nothing 1
     Mc.CVoid  -> error "Can't have void decl with id"
     Mc.Pntr p -> IR.alloca (decideType (Mc.Pntr p)) Nothing 8
-  put $ Names { active = addToActive (active st) id d, rest = rest st }
+  put $ Env { active = addToActive (active env) id d, rest = rest env
+            , funcHasRet = funcHasRet env }
   return ()
 
 ------------------------------------------------------------
@@ -179,33 +183,45 @@ genFunc (Mc.Func tpe id params block) = mdo
   IR.function (AST.mkName id) ps (decideType tpe) $ \ops -> mdo
 
     -- Add params to symboltable
-    ns <- get
-    let nns = newActive ns
-    put $ Names { active = paramsToST (active nns) params ops, rest = rest nns }
+    env <- get
+    let envv = newActive env
+    put $ Env { active = paramsToST (active envv) params ops, rest = rest envv
+              , funcHasRet = funcHasRet envv }
     gparams <- mapM genParam [(p, o) | p <- params | o <- ops]
     nsWithParams <- get
-    put $ Names { active = paramsToST (active nsWithParams) params gparams
-                , rest = rest nsWithParams }
+    put $ Env { active = paramsToST (active nsWithParams) params gparams
+                , rest = rest nsWithParams, funcHasRet = funcHasRet envv }
 
     let f = \y -> case y of
                     Left decl  -> genDecl decl
                     Right stmt -> genStmt stmt
     mapM f $ Mc.getBlock block
 
-    IR.ret $ IR.int32 0
+    -- Check whether return stmt is already generated
+    envAfter <- get
+    case funcHasRet envAfter of
+      False  -> do
+                  IR.ret $ IR.int32 0
+                  return ()
+      True   -> do
+                  put $ Env { active = active envAfter
+                            , rest = rest envAfter
+                            , funcHasRet = False }
+                  return ()
 
 ------------------------------------------------------------
 -- Statements
 ------------------------------------------------------------
 
 -- Block statements
-genStmt :: (MonadState Names m, IR.MonadModuleBuilder m, IR.MonadIRBuilder m, MonadFix m)
+genStmt :: (MonadState Env m, IR.MonadModuleBuilder m, IR.MonadIRBuilder m, MonadFix m)
         => Mc.Stmt
         -> m ()
 genStmt (Mc.BlockStmt bl) = do
-  ns <- get
-  let nns = newActive ns
-  put $ Names { active = active nns, rest = rest nns }
+  env <- get
+  let envv = newActive env
+  put $ Env { active = active envv, rest = rest envv
+            , funcHasRet = funcHasRet envv }
   let f = \y -> case y of
                   Left decl  -> genDecl decl
                   Right stmt -> genStmt stmt
@@ -251,6 +267,18 @@ genStmt (Mc.While expr stmt) = mdo
   continue <- IR.block
   return ()
 
+-- Return statements
+genStmt (Mc.Return x) = do
+  env <- get
+  put $ Env { active = active env, rest = rest env
+            , funcHasRet = True }
+  case x of
+    Nothing -> do
+                IR.retVoid
+    Just x  -> do
+                e <- genExpr x
+                IR.ret e
+
 -- Null statements
 genStmt (Mc.Null) = return ()
 
@@ -259,12 +287,12 @@ genStmt (Mc.Null) = return ()
 ------------------------------------------------------------
 
 -- Variables
-genExpr :: (MonadState Names m, IR.MonadModuleBuilder m, IR.MonadIRBuilder m)
+genExpr :: (MonadState Env m, IR.MonadModuleBuilder m, IR.MonadIRBuilder m)
         => Mc.Expr
         -> m AST.Operand
 genExpr (Mc.Var id) = do
   st <- get
-  let op = idFromNames id st
+  let op = idFromEnv id st
   IR.load op 8
 
 -- Int Constant
@@ -289,7 +317,7 @@ genExpr (Mc.BinOp op e ee) = do
 -- Assignment
 genExpr (Mc.Assign id expr) = do
   ns <- get
-  let var = idFromNames id ns
+  let var = idFromEnv id ns
   e <- genExpr expr
   IR.store var 8 e
   return var
@@ -300,7 +328,7 @@ genExpr (Mc.Assign id expr) = do
 
 genParam ((Mc.Param _ id), (AST.LocalReference tpe nm)) = do
   st <- get
-  let op = idFromNames id st
+  let op = idFromEnv id st
   addr <- IR.alloca tpe Nothing 8
   IR.store addr 8 op
   return addr

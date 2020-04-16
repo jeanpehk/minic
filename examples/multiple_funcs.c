@@ -1,6 +1,9 @@
 int ok() {
 }
 
-int main(int c, int d) {
+int main(int argc, char**argv) {
+  int a;
+  a = argc;
+  return a;
 }
 

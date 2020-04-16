@@ -43,7 +43,7 @@ int = lexeme L.decimal
 
 -- Parses a single variable
 variable :: Parser Expr
-variable = Var <$> identifier
+variable = Var <$> (identifier)
 
 -- character constant, e.g 'k'
 charConst :: Parser Char
@@ -107,7 +107,7 @@ decl :: Parser Decl
 decl = Decl <$> tpe <*> (identifier <* lexeme (char ';'))
 
 -- Parser for functions
--- func : type id params block ;
+-- func : type id params block expr?;
 func :: Parser Func
 func = Func <$> tpe <*> identifier <*> params <*> block
 
@@ -150,12 +150,15 @@ block = do
 -- stmt : block
 --      | exprStmt
 --      | ifElse
---      | while ;
+--      | while
+--      | return
+--      | null ;
 stmt :: Parser Stmt
 stmt =  BlockStmt <$> block
     <|> exprStmt
     <|> ifElse
     <|> while
+    <|> ret
     <|> nullStmt
 
 -- Parses and expression statement
@@ -183,6 +186,13 @@ while = do
   s <- stmt
   return $ While e s
 
+ret :: Parser Stmt
+ret = do
+  lexeme (chunk "return")
+  e <- optional expr
+  lexeme (symbol ";")
+  return $ Return e
+
 -- Parses a null statement
 -- nullStmt : ';' ;
 nullStmt :: Parser Stmt
@@ -204,15 +214,15 @@ nonPtrs =
 
 -- Parses a starting character of an identifier
 idStart :: Parser Char
-idStart = lexeme lowerChar
-     <|>  lexeme upperChar
-     <|>  lexeme (char '_')
+idStart = lowerChar
+     <|>  upperChar
+     <|>  (char '_')
 
 -- Parses a character of an identifier that does not
 -- need to start the identifier
 idRest :: Parser Char
 idRest =  idStart
-      <|> lexeme digitChar
+      <|> digitChar
 
 -- Parses an identifier
 -- Also checks that it is not a reserved keyword

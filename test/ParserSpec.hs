@@ -112,6 +112,15 @@ spec = do
     it "should parse with Eq expr and assignment statements" $
       parse stmt "" "if (abcd == 5) abcd = 6; else abcd = 7;" `shouldParse` ans
 
+  let ans = Return (Just (IntConst 2))
+  describe "return int const" $ do
+    it "should parse as Just" $
+      parse stmt "" "return 2;" `shouldParse` ans
+
+  let ans = Return Nothing
+  describe "return nothing" $ do
+    it "should parse as Nothing" $
+      parse stmt "" "return ;" `shouldParse` ans
 -- translation unit
 
   describe "translation unit" $ do

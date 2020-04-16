@@ -212,6 +212,14 @@ checkStmt (While e s) = do
   cs <- checkStmt s
   return $ While (fst ce) cs
 
+-- Return
+checkStmt (Return e) = do
+  case e of
+    Nothing -> return $ Return Nothing
+    Just x  -> do
+                ce <- checkExpr x
+                return $ Return $ Just (fst ce)
+
 -- Null
 checkStmt Null = return Null
 
