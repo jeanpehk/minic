@@ -2,7 +2,7 @@
 
 Compiler for a small subset of the C programming language that uses LLVM IR. Written in Haskell.
 
-This is not meant to be an actual compiler but is done as a learning experiment.
+Written for a university compiler construction course.
 
 ## Features
 
@@ -16,7 +16,8 @@ These are the current features of the compiler:
 * Function parameters
 * Variable declarations, assignments
 * boolean comparisons "<", ">", "=="
-* types: int, void
+* types: int, char, void
+* pointers
 
 Functions compile fine, still needs work on linking and calling instead of just defining. 
 
