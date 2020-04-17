@@ -7,7 +7,7 @@ and [llvm-hs](https://github.com/llvm-hs/llvm-hs) for code generation.
 
 This compiler was written for a university compiler construction course and further expanded
 as a learning experiment. The compiler is written in a fairly straightforward way, and as
-such might be of use to someone trying to write a compiler using the modern Haskell LLVM bindings.
+such can be of use to someone trying to write a compiler using the modern Haskell LLVM bindings.
 
 ## Features
 
