@@ -56,18 +56,6 @@ decideType Mc.CChar  = AST.i8
 decideType Mc.CVoid  = AST.void
 decideType (Mc.Pntr p) = AST.ptr (decideType p)
 
--- Simple test function
-test :: IO ()
-test = do
-  let res = snd $
-            runGen "test" (Mc.TUnit [(Mc.GDecl (Mc.Decl Mc.CInt "hello"))
-                          , (Mc.FDef (Mc.Func Mc.CInt "func"
-                            [Mc.Param Mc.CInt "ok", Mc.Param Mc.CInt "abc"]
-                              (Mc.Block
-                                [Left (Mc.Decl Mc.CInt "abc3"),
-                                 Right (Mc.ExprStmt (Mc.Var "abci"))])))])
-  Prelude.putStrLn $ show res
-
 -- Turns a minic param into llvm param
 mkParam :: Mc.Param -> (AST.Type, IR.ParameterName)
 mkParam (Mc.Param Mc.CInt id)     = (AST.i32, IR.ParameterName (fromString id))
@@ -278,6 +266,13 @@ genStmt (Mc.Return x) = do
     Just x  -> do
                 e <- genExpr x
                 IR.ret e
+
+-- Print statements
+genStmt (Mc.Print expr) = do
+  e <- genExpr expr
+  prnt <- IR.extern (AST.mkName "print") [AST.i32] AST.void
+  IR.call prnt [(e, [])]
+  return ()
 
 -- Null statements
 genStmt (Mc.Null) = return ()

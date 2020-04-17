@@ -220,6 +220,13 @@ checkStmt (Return e) = do
                 ce <- checkExpr x
                 return $ Return $ Just (fst ce)
 
+-- Print
+checkStmt (Print e) = do
+  ce <- checkExpr e
+  case snd ce of
+    CInt -> return $ Print e
+    _    -> throwError $ TError ("Only int print's allowed at the moment")
+
 -- Null
 checkStmt Null = return Null
 

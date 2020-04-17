@@ -152,13 +152,15 @@ block = do
 --      | ifElse
 --      | while
 --      | return
+--      | print int
 --      | null ;
 stmt :: Parser Stmt
 stmt =  BlockStmt <$> block
-    <|> exprStmt
+    <|> try exprStmt
     <|> ifElse
     <|> while
     <|> ret
+    <|> prnt
     <|> nullStmt
 
 -- Parses and expression statement
@@ -192,6 +194,13 @@ ret = do
   e <- optional expr
   lexeme (symbol ";")
   return $ Return e
+
+prnt :: Parser Stmt
+prnt = do
+  lexeme (chunk "print")
+  e <- expr
+  symbol ";"
+  return $ Print e
 
 -- Parses a null statement
 -- nullStmt : ';' ;
