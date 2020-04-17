@@ -31,7 +31,9 @@ You will need llvm installed. For installation instructions check e.g:
 
 To build with stack:
 
-```$ stack build ```
+```bash
+$ stack build
+```
 
 To run tests:
 
@@ -41,12 +43,18 @@ To run tests:
 
 You can run the compiler with a single script (requires gcc):
 
-``` $ ./minic $FILENAME ```
+```bash
+$ ./minic $FILENAME
+```
 
 Or compile in steps:
 
 1. Run the compiler with an example file to produce an object file:
-``` $ stack exec minic-exe examples/$EXAMPLEFILE ```
+```bash
+$ stack exec minic-exe examples/$EXAMPLEFILE
+```
 2. Link and compile the generated object file with e.g gcc:
-``` $ gcc runtime.c a.out -o $FILENAME ```
+```bash
+$ gcc runtime.c a.out -o $FILENAME
+```
 
