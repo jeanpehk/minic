@@ -37,7 +37,9 @@ $ stack build
 
 To run tests:
 
-```$ stack test ```
+```bash
+$ stack test
+```
 
 ## Running
 
