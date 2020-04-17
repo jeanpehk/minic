@@ -27,7 +27,7 @@ Current features of the compiler include:
 ## Building
 
 You will need llvm installed. For installation instructions check e.g:
-<https://github.com/llvm-hs/llvm-hs/blob/llvm-4/README.md#installing-llvm>.
+<https://github.com/llvm-hs/llvm-hs/blob/llvm-9/README.md#installing-llvm>.
 
 To build with stack:
 
