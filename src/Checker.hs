@@ -1,3 +1,5 @@
+{-# LANGUAGE RecursiveDo #-}
+
 module Checker where
 
 import AST
@@ -19,6 +21,7 @@ data SymbolTable = ST { getSt :: Map.Map Id Type }
 -- Type environment for the program
 data Env = Env { active :: SymbolTable
                , blocks :: [SymbolTable]
+               , funcs  :: Map.Map Id Type
                , used   :: [SymbolTable] }
   deriving (Eq, Show)
 
@@ -36,22 +39,19 @@ data Error
 dError :: Id -> String
 dError id = "id: '" ++ id ++ "' already declared"
 
--- Add a new identifier into the environment
-addId :: Type -> Id -> Env -> Env
-addId tpe id env = Env { active = ST (Map.insert id tpe (getSt (active env)))
-                            , blocks = blocks env
-                            , used   = used env }
-
 -- Adds a new block into Env and makes it active
 addBlock :: Env -> Env
-addBlock (Env active blocks used) = Env (ST Map.empty) (active:blocks) (used)
+addBlock (Env active blocks funcs used) = Env (ST Map.empty) (active:blocks)
+                                              funcs used
 
 -- Drops the current active block active ones
 dropBlock :: Env -> Env
 dropBlock env = case blocks env of
                   (x:xs) -> Env { active = x, blocks = xs
+                                , funcs = funcs env
                                 , used   = active env:used env }
                   []     -> Env { active = ST Map.empty, blocks = []
+                                , funcs = funcs env
                                 , used   = used env }
 
 -- Look for id from blocks incase it is not in the active one
@@ -61,18 +61,40 @@ lookFromBlocks id (x:xs) = case Map.lookup id (getSt x) of
                              Just x  -> Just x
 lookFromBlocks id []  = Nothing
 
--- Get types of already declared variables from the entire Env
-getDeclaredId :: Id -> Env -> Maybe Type
-getDeclaredId id env = case Map.lookup id st of
-                 Nothing -> lookFromBlocks id (blocks env)
-                 Just x  -> Just x
-  where
-    st = getSt (active env)
-
 -- Look for id from active symbol table
 -- Used for declaring values
 getId :: Id -> Env -> Maybe Type
 getId id env = Map.lookup id (getSt (active env))
+
+-- Get types of already declared variables from the entire Env
+getDeclaredId :: Id -> Env -> Maybe Type
+getDeclaredId id env = case Map.lookup id st of
+                 Nothing -> case lookFromBlocks id (blocks env) of
+                              Nothing -> Map.lookup id (funcs env)
+                              Just x  -> Just x
+                 Just x  -> Just x
+  where
+    st = getSt (active env)
+
+-- Look for id from functions
+-- Used for declaring or calling functions
+getFunc :: Id -> Env -> Maybe Type
+getFunc id env = case Map.lookup id (funcs env) of
+                   Nothing -> Map.lookup id $ getSt (active env)
+                   Just x  -> Just x
+
+-- Add a new identifier into the environment
+addId :: Type -> Id -> Env -> Env
+addId tpe id env = Env { active = ST (Map.insert id tpe (getSt (active env)))
+                            , blocks = blocks env
+                            , funcs  = funcs env
+                            , used   = used env }
+
+addFunc :: Type -> Id -> Env -> Env
+addFunc tpe id env = Env { active = active env
+                         , blocks = blocks env
+                         , funcs = Map.insert id tpe (funcs env)
+                         , used = used env}
 
 ------------------------------------------------------------
 -- Type comparisons for expressions
@@ -99,7 +121,7 @@ compareTypes _ (CVoid) = Left $ TError "Cannot combine Void with another type"
 runChecker :: TUnit -> (Either Error TUnit, Env)
 runChecker tunit = (runState . runExceptT) (checkTu tunit) env
   where
-    env = Env { active = ST Map.empty, blocks = [], used = [] }
+    env = Env { active = ST Map.empty, blocks = [], funcs = Map.empty, used = [] }
 
 ------------------------------------------------------------
 -- Translation unit
@@ -127,11 +149,11 @@ checkTl gd@(GDecl (Decl tpe id)) = do
 -- Function
 ------------------------------------------------------------
 
-checkTl (FDef (Func tpe id params block)) = do
+checkTl (FDef (Func tpe id params block)) = mdo
   env <- get
-  -- Add id first into top level declarations before creating a new block
-  case getId id env of
-    Nothing -> put $ addId tpe id env
+  -- Add id first into functions in env
+  case getFunc id env of
+    Nothing -> put $ addFunc tpe id env
     Just x  -> throwError $ TError (dError id)
   nenv <- get
   put $ addBlock nenv
@@ -281,4 +303,11 @@ checkExpr e@(Assign id expr) = do
       case compareTypes x (snd etype) of
         Left err -> throwError err
         Right x  -> return (e, x)
+
+-- Function calls
+checkExpr e@(FCall id) = do
+  env <- get
+  case getFunc id env of
+    Nothing -> throwError $ TError ("Function: " ++ id ++ " not declared")
+    Just x  -> return (e, x)
 

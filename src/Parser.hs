@@ -9,6 +9,7 @@ import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
 
 ------------------------------------------------------------
+
 -- Parser for minic.
 
 -- The Parser assumes no white space or comments before
@@ -41,58 +42,19 @@ symbol = L.symbol skip
 int :: Parser Int
 int = lexeme L.decimal
 
--- Parses a single variable
-variable :: Parser Expr
-variable = Var <$> (identifier)
-
--- character constant, e.g 'k'
-charConst :: Parser Char
-charConst = lexeme $ between (symbol "'") (symbol "'") $ (lowerChar <|> upperChar)
-
--- Parses a constant
-constant :: Parser Expr
-constant = IntConst <$> int
-        <|> CharConst <$> charConst
-
 -- Helper to parse something between parentheses
 parens :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")
-
--- Parses a unit with the smallest precedence in an expression
-term :: Parser Expr
-term = parens expr
-         <|> variable
-         <|> constant
-
--- Helper to write binops for op table
-binary :: String -> (Expr -> Expr -> Expr) -> Operator Parser Expr
-binary op f = InfixL $ f <$ symbol op
-
--- Operator table
--- Every inner list is a level of precedence that contains
--- all the operators of that level.
--- Precedence levels are in descending order.
-operatorTable :: [[Operator Parser Expr]]
-operatorTable =
-  [
-    [ binary "*" (BinOp Mul)
-    , binary "/" (BinOp Div)],
-    [ binary "+" (BinOp Add)
-    , binary "-" (BinOp Subtr)],
-    [ binary "<" (BinOp Lt)
-    , binary ">" (BinOp Gt)],
-    [binary "==" (BinOp Eq)]
-  ]
-
--- Parser an lvalue for assignment expressions
-lvalue :: Parser Id
-lvalue = (lexeme . try) (identifier <* (char '=') <* notFollowedBy (char '='))
 
 -- Parser for a single translation unit (i.e, a single source code file)
 -- Parses multiple top level declarations and definitions
 -- tunit : topLevel* ;
 tunit :: Parser TUnit
-tunit = TUnit <$> (many topLevel) <* eof
+tunit = do
+  skip
+  tls <- many topLevel
+  eof
+  return $ TUnit tls
 
 -- Parser for top-level declarations and definitions
 -- topLevel : decl
@@ -124,7 +86,7 @@ params = do
 -- param : type id ;
 param :: Parser Param
 param = try $ Param <$> tpe <*> identifier
-      <|> ParamNoId <$> tpe
+     <|> ParamNoId <$> tpe
 
 -- Parses an expression
 -- expr : id '=' arithExpr
@@ -137,14 +99,36 @@ expr = Assign <$> lvalue <*> expr
 exprArith :: Parser Expr
 exprArith = makeExprParser term operatorTable
 
--- Parses a single program block
--- block : '{' (stmt | decl)* '}' ;
-block :: Parser Block
-block = do
-  lexeme (char '{')
-  list <- many (Left <$> decl <|> Right <$> stmt)
-  lexeme (char '}')
-  return $ Block list
+-- Parses a smallest unit in an expression
+term :: Parser Expr
+term = parens expr
+    <|> try fcall
+    <|> variable
+    <|> constant
+
+-- Helper to write binops for op table
+binary :: String -> (Expr -> Expr -> Expr) -> Operator Parser Expr
+binary op f = InfixL $ f <$ symbol op
+
+-- Operator table
+-- Every inner list is a level of precedence that contains
+-- all the operators of that level.
+-- Precedence levels are in descending order.
+operatorTable :: [[Operator Parser Expr]]
+operatorTable =
+  [
+    [ binary "*" (BinOp Mul)
+    , binary "/" (BinOp Div)],
+    [ binary "+" (BinOp Add)
+    , binary "-" (BinOp Subtr)],
+    [ binary "<" (BinOp Lt)
+    , binary ">" (BinOp Gt)],
+    [binary "==" (BinOp Eq)]
+  ]
+
+-- Parses an lvalue for assignment expressions
+lvalue :: Parser Id
+lvalue = (lexeme . try) (identifier <* (char '=') <* notFollowedBy (char '='))
 
 -- Parses a single statement
 -- stmt : block
@@ -162,6 +146,15 @@ stmt =  BlockStmt <$> block
     <|> ret
     <|> prnt
     <|> nullStmt
+
+-- Parses a single program block
+-- block : '{' (stmt | decl)* '}' ;
+block :: Parser Block
+block = do
+  lexeme (char '{')
+  list <- many (Left <$> decl <|> Right <$> stmt)
+  lexeme (char '}')
+  return $ Block list
 
 -- Parses and expression statement
 -- expr_stmt : expr ';' ;
@@ -188,17 +181,20 @@ while = do
   s <- stmt
   return $ While e s
 
+-- Parses a return statement
 ret :: Parser Stmt
 ret = do
   lexeme (chunk "return")
   e <- optional expr
-  lexeme (symbol ";")
+  symbol ";"
   return $ Return e
 
+-- Parses a simplified print statement
+-- prnt : 'print' '(' expr ')' ';' ;
 prnt :: Parser Stmt
 prnt = do
   lexeme (chunk "print")
-  e <- expr
+  e <- parens expr
   symbol ";"
   return $ Print e
 
@@ -206,6 +202,15 @@ prnt = do
 -- nullStmt : ';' ;
 nullStmt :: Parser Stmt
 nullStmt = Null <$ (lexeme (char ';'))
+
+-- Parses a function call with no args
+-- fcall : identifier '(' ')'
+fcall :: Parser Expr
+fcall = do
+  id <- identifier
+  symbol "("
+  symbol ")"
+  return $ FCall id
 
 -- Parses a type
 -- type : 'int'
@@ -215,17 +220,32 @@ tpe = do
   tp <- nonPtrs
   foldr (const Pntr) tp <$> (many (symbol "*"))
 
+-- Types with no pointers
 nonPtrs :: Parser Type
 nonPtrs =
-   (CInt  <$ lexeme (try ((chunk "int" <* notFollowedBy (idStart <|> idRest)))))
-   <|> (CChar <$ lexeme (chunk "char" <* notFollowedBy (idStart <|> idRest)))
-   <|> (CVoid <$ lexeme (chunk "void" <* notFollowedBy (idStart <|> idRest)))
+  (CInt  <$ lexeme (try ((chunk "int" <* notFollowedBy (idStart <|> idRest)))))
+  <|> (CChar <$ lexeme (chunk "char" <* notFollowedBy (idStart <|> idRest)))
+  <|> (CVoid <$ lexeme (chunk "void" <* notFollowedBy (idStart <|> idRest)))
+
+-- Parses a single variable
+variable :: Parser Expr
+variable = Var <$> (identifier)
+
+-- character constant, e.g 'k'
+charConst :: Parser Char
+charConst = lexeme $ between (symbol "'") (symbol "'") $ (lowerChar <|> upperChar)
+
+-- Parses a constant
+constant :: Parser Expr
+constant = IntConst <$> int
+        <|> CharConst <$> charConst
+
 
 -- Parses a starting character of an identifier
 idStart :: Parser Char
 idStart = lowerChar
-     <|>  upperChar
-     <|>  (char '_')
+       <|>  upperChar
+       <|>  (char '_')
 
 -- Parses a character of an identifier that does not
 -- need to start the identifier

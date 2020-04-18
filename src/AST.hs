@@ -49,6 +49,7 @@ data Expr
   | CharConst Char
   | BinOp Op Expr Expr
   | Assign Id Expr
+  | FCall Id
   deriving (Eq, Show)
 
 data Op

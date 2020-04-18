@@ -93,6 +93,11 @@ spec = do
     it "should parse as eq expr" $
       parse expr  "" "a==3" `shouldParse` BinOp Eq (Var "a") (IntConst 3)
 
+  let ans = FCall "noArgsFunc"
+  describe "Function call without args" $ do
+    it "should parse" $
+      parse expr "" "noArgsFunc() ;" `shouldParse` ans
+
 -- statements
 
   let ans = While (BinOp Lt (Var "myvar") (IntConst 3)) (ExprStmt (Assign "myvar" (IntConst 3)))
@@ -121,6 +126,7 @@ spec = do
   describe "return nothing" $ do
     it "should parse as Nothing" $
       parse stmt "" "return ;" `shouldParse` ans
+
 -- translation unit
 
   describe "translation unit" $ do

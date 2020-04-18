@@ -36,11 +36,26 @@ import qualified LLVM.IRBuilder.Monad as IR
 
 type Generator = IR.ModuleBuilderT (State Env)
 
-data Env = Env { active :: ST, rest :: [ST], funcHasRet :: Bool }
+data Env = Env { active :: ST, rest :: [ST]
+               , funcs :: Map.Map String AST.Operand
+               , funcHasRet :: Bool }
   deriving (Eq, Show)
 
 newtype ST = ST { getST :: Map.Map String AST.Operand }
   deriving (Eq, Show)
+
+
+-- Simple test function
+test :: IO ()
+test = do
+  let res = snd $
+            runGen "test" (Mc.TUnit [(Mc.GDecl (Mc.Decl Mc.CInt "hello"))
+                          , (Mc.FDef (Mc.Func Mc.CInt "func"
+                            [Mc.Param Mc.CInt "ok", Mc.Param Mc.CInt "abc"]
+                              (Mc.Block
+                                [Left (Mc.Decl Mc.CInt "abc3"),
+                                 Right (Mc.ExprStmt (Mc.Var "abci"))])))])
+  Prelude.putStrLn $ show res
 
 ------------------------------------------------------------
 -- Helper functions for building an LLVM Module
@@ -81,26 +96,37 @@ addToActive st id op = case Map.lookup id (getST st) of
 -- New active for Env to avoid name collisions
 -- when moving into a new block in the source language.
 newActive :: Env -> Env
-newActive ns = Env { active = ST Map.empty, rest = active ns:rest ns
-                     , funcHasRet = funcHasRet ns }
+newActive env = Env { active = ST Map.empty, rest = active env:rest env
+                    , funcs = funcs env
+                    , funcHasRet = funcHasRet env }
 
 -- Drop active ST from Env when moving out of a block
 -- in the source language.
 dropActive :: Env -> Env
-dropActive ns = case rest ns of
+dropActive env = case rest env of
                   []     -> Env { active = ST Map.empty, rest = []
-                                , funcHasRet = funcHasRet ns }
-                  (x:xs) -> Env { active = x, rest = xs, funcHasRet = funcHasRet ns }
+                                , funcs = funcs env
+                                , funcHasRet = funcHasRet env }
+                  (x:xs) -> Env { active = x, rest = xs
+                                , funcs = funcs env
+                                , funcHasRet = funcHasRet env }
 
+-- Get id from Environment, excluding functions
 idFromEnv :: String -> Env -> AST.Operand
-idFromEnv id ns = case Map.lookup id (getST (active ns)) of
-                      Nothing -> lookUpRest (rest ns)
+idFromEnv id env = case Map.lookup id (getST (active env)) of
+                      Nothing -> lookUpRest (rest env)
                       Just x  -> x
   where
     lookUpRest (r:rs) = case Map.lookup id (getST r) of
                           Nothing -> lookUpRest rs
                           Just x  -> x
     lookUpRest [] = error $ "Var: " ++ id ++ " not found in listed Env"
+
+-- Get function from Env
+funcFromEnv :: String -> Env -> AST.Operand
+funcFromEnv id env = case Map.lookup id (funcs env) of
+                      Nothing -> error $ "Function: '" ++ id ++ "' not found"
+                      Just x  -> x
 
 getName :: AST.Operand -> AST.Name
 getName op = case op of
@@ -112,9 +138,11 @@ getName op = case op of
 ------------------------------------------------------------
 
 runGen :: String -> Mc.TUnit -> (AST.Module, Env)
-runGen nm tunit = runState (IR.buildModuleT (fromString nm) (codeGen tunit)) ns
+runGen nm tunit = runState (IR.buildModuleT (fromString nm) (codeGen tunit)) env
   where
-    ns = Env { active = ST Map.empty, rest = [], funcHasRet = False }
+    env = Env { active = ST Map.empty, rest = []
+              , funcs = Map.empty
+              , funcHasRet = False }
 
 ------------------------------------------------------------
 -- Translation units
@@ -123,12 +151,8 @@ runGen nm tunit = runState (IR.buildModuleT (fromString nm) (codeGen tunit)) ns
 codeGen :: Mc.TUnit -> Generator ()
 codeGen (Mc.TUnit tls) = do
   let x = \y -> case y of
-                  (Mc.GDecl decl) -> do
-                                       genGlobalDecl decl
-                                       return ()
-                  (Mc.FDef func)  -> do
-                                       genFunc func
-                                       return ()
+                  (Mc.GDecl decl) -> genGlobalDecl decl
+                  (Mc.FDef func)  -> genFunc func
   mapM_ x tls
 
 ------------------------------------------------------------
@@ -137,14 +161,15 @@ codeGen (Mc.TUnit tls) = do
 
 genGlobalDecl :: (MonadState Env m, IR.MonadModuleBuilder m)
         => Mc.Decl
-        -> m AST.Operand
+        -> m ()
 genGlobalDecl (Mc.Decl Mc.CVoid id) = error "Can't have void decl with id"
 genGlobalDecl (Mc.Decl tpe id) = do
   env <- get
   d <- IR.global (AST.mkName id) (decideType tpe) (AST.Int (fromIntegral 32) 0)
   put $ Env { active = addToActive (active env) id d, rest = rest env
+            , funcs = funcs env
             , funcHasRet = funcHasRet env}
-  return d
+  return ()
 
 
 genDecl :: (MonadState Env m, IR.MonadModuleBuilder m, IR.MonadIRBuilder m)
@@ -158,6 +183,7 @@ genDecl (Mc.Decl tpe id) = do
     Mc.CVoid  -> error "Can't have void decl with id"
     Mc.Pntr p -> IR.alloca (decideType (Mc.Pntr p)) Nothing 8
   put $ Env { active = addToActive (active env) id d, rest = rest env
+            , funcs = funcs env
             , funcHasRet = funcHasRet env }
   return ()
 
@@ -165,37 +191,52 @@ genDecl (Mc.Decl tpe id) = do
 -- Functions
 ------------------------------------------------------------
 
-genFunc :: Mc.Func -> Generator AST.Operand
 genFunc (Mc.Func tpe id params block) = mdo
   let ps = map mkParam params
-  IR.function (AST.mkName id) ps (decideType tpe) $ \ops -> mdo
+  env <- get
+  -- Insert function to env using mdo to allow
+  -- recursive calls
+  put $ Env { active = active env, rest = rest env
+            , funcs = Map.insert id f (funcs env)
+            , funcHasRet = funcHasRet env }
+
+  f <- IR.function (AST.mkName id) ps (decideType tpe) $ \ops -> do
 
     -- Add params to symboltable
     env <- get
     let envv = newActive env
     put $ Env { active = paramsToST (active envv) params ops, rest = rest envv
+              , funcs = funcs envv
               , funcHasRet = funcHasRet envv }
+    -- generate params
     gparams <- mapM genParam [(p, o) | p <- params | o <- ops]
     nsWithParams <- get
+    -- add params to env
     put $ Env { active = paramsToST (active nsWithParams) params gparams
-                , rest = rest nsWithParams, funcHasRet = funcHasRet envv }
+              , rest = rest nsWithParams
+              , funcs = funcs nsWithParams
+              , funcHasRet = funcHasRet nsWithParams }
 
-    let f = \y -> case y of
+    let ff = \y -> case y of
                     Left decl  -> genDecl decl
                     Right stmt -> genStmt stmt
-    mapM f $ Mc.getBlock block
+
+    mapM_ ff $ Mc.getBlock block
 
     -- Check whether return stmt is already generated
     envAfter <- get
     case funcHasRet envAfter of
-      False  -> do
+      False -> do
                   IR.ret $ IR.int32 0
                   return ()
-      True   -> do
+      True  -> do
                   put $ Env { active = active envAfter
                             , rest = rest envAfter
+                            , funcs = funcs env
                             , funcHasRet = False }
                   return ()
+
+  return ()
 
 ------------------------------------------------------------
 -- Statements
@@ -209,6 +250,7 @@ genStmt (Mc.BlockStmt bl) = do
   env <- get
   let envv = newActive env
   put $ Env { active = active envv, rest = rest envv
+            , funcs = funcs env
             , funcHasRet = funcHasRet envv }
   let f = \y -> case y of
                   Left decl  -> genDecl decl
@@ -259,6 +301,7 @@ genStmt (Mc.While expr stmt) = mdo
 genStmt (Mc.Return x) = do
   env <- get
   put $ Env { active = active env, rest = rest env
+            , funcs = funcs env
             , funcHasRet = True }
   case x of
     Nothing -> do
@@ -286,14 +329,14 @@ genExpr :: (MonadState Env m, IR.MonadModuleBuilder m, IR.MonadIRBuilder m)
         => Mc.Expr
         -> m AST.Operand
 genExpr (Mc.Var id) = do
-  st <- get
-  let op = idFromEnv id st
+  env <- get
+  let op = idFromEnv id env
   IR.load op 8
 
--- Int Constant
+-- Int Constants
 genExpr (Mc.IntConst int) = return $ constInt32 int
 
--- Char Constant
+-- Char Constants
 genExpr (Mc.CharConst char) = return $ IR.int8 $ toInteger $ ord char
 
 -- BinOps
@@ -309,21 +352,26 @@ genExpr (Mc.BinOp op e ee) = do
     Mc.Gt    -> IR.icmp AST.SGT e1 e2
     Mc.Eq    -> IR.icmp AST.EQ e1 e2
 
--- Assignment
+-- Assignments
 genExpr (Mc.Assign id expr) = do
-  ns <- get
-  let var = idFromEnv id ns
+  env <- get
+  let var = idFromEnv id env
   e <- genExpr expr
   IR.store var 8 e
   return var
+
+-- Function calls
+genExpr (Mc.FCall id) = do
+  env <- get
+  IR.call (funcFromEnv id env) []
 
 ------------------------------------------------------------
 -- Params
 ------------------------------------------------------------
 
 genParam ((Mc.Param _ id), (AST.LocalReference tpe nm)) = do
-  st <- get
-  let op = idFromEnv id st
+  env <- get
+  let op = idFromEnv id env
   addr <- IR.alloca tpe Nothing 8
   IR.store addr 8 op
   return addr
