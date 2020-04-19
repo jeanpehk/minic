@@ -21,7 +21,7 @@ data SymbolTable = ST { getSt :: Map.Map Id Type }
 -- Type environment for the program
 data Env = Env { active :: SymbolTable
                , blocks :: [SymbolTable]
-               , funcs  :: Map.Map Id Type
+               , funcs  :: Map.Map Id (Type, [Param])
                , used   :: [SymbolTable] }
   deriving (Eq, Show)
 
@@ -70,18 +70,20 @@ getId id env = Map.lookup id (getSt (active env))
 getDeclaredId :: Id -> Env -> Maybe Type
 getDeclaredId id env = case Map.lookup id st of
                  Nothing -> case lookFromBlocks id (blocks env) of
-                              Nothing -> Map.lookup id (funcs env)
+                              Nothing -> do
+                                          r <- Map.lookup id (funcs env)
+                                          return $ fst r
                               Just x  -> Just x
                  Just x  -> Just x
   where
     st = getSt (active env)
 
 -- Look for id from functions
--- Used for declaring or calling functions
+-- Used for declaring functions
 getFunc :: Id -> Env -> Maybe Type
 getFunc id env = case Map.lookup id (funcs env) of
                    Nothing -> Map.lookup id $ getSt (active env)
-                   Just x  -> Just x
+                   Just x  -> Just $ fst x
 
 -- Add a new identifier into the environment
 addId :: Type -> Id -> Env -> Env
@@ -90,11 +92,11 @@ addId tpe id env = Env { active = ST (Map.insert id tpe (getSt (active env)))
                             , funcs  = funcs env
                             , used   = used env }
 
-addFunc :: Type -> Id -> Env -> Env
-addFunc tpe id env = Env { active = active env
-                         , blocks = blocks env
-                         , funcs = Map.insert id tpe (funcs env)
-                         , used = used env}
+addFunc :: Type -> [Param] -> Id -> Env -> Env
+addFunc tpe ps id env = Env { active = active env
+                              , blocks = blocks env
+                              , funcs = Map.insert id (tpe, ps) (funcs env)
+                              , used = used env}
 
 ------------------------------------------------------------
 -- Type comparisons for expressions
@@ -153,7 +155,7 @@ checkTl (FDef (Func tpe id params block)) = mdo
   env <- get
   -- Add id first into functions in env
   case getFunc id env of
-    Nothing -> put $ addFunc tpe id env
+    Nothing -> put $ addFunc tpe params id env
     Just x  -> throwError $ TError (dError id)
   nenv <- get
   put $ addBlock nenv
@@ -305,9 +307,21 @@ checkExpr e@(Assign id expr) = do
         Right x  -> return (e, x)
 
 -- Function calls
-checkExpr e@(FCall id) = do
+checkExpr e@(FCall id args) = do
   env <- get
-  case getFunc id env of
+  as <- mapM checkExpr args
+  case Map.lookup id (funcs env) of
     Nothing -> throwError $ TError ("Function: " ++ id ++ " not declared")
-    Just x  -> return (e, x)
+    Just x  -> do
+                fparams (snd x) (fmap snd as)
+                return (e, fst x)
+
+-- Check function call parameters
+fparams :: [Param] -> [Type] -> Checker ()
+fparams (x:xs) (y:ys) = case compareTypes (getType x) y of
+                          Left err -> throwError $ err
+                          Right tp -> fparams xs ys
+fparams [] (y:ys) = throwError $ TError "Incorrect amount of args in functions call"
+fparams (x:xs) [] = throwError $ TError "Incorrect amount of args in functions call"
+fparams [] [] = return ()
 

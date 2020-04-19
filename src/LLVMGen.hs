@@ -361,9 +361,11 @@ genExpr (Mc.Assign id expr) = do
   return var
 
 -- Function calls
-genExpr (Mc.FCall id) = do
+genExpr (Mc.FCall id args) = do
   env <- get
-  IR.call (funcFromEnv id env) []
+  as <- mapM genExpr args
+  let mkArgs = fmap (\y -> (y, [])) as
+  IR.call (funcFromEnv id env) mkArgs
 
 ------------------------------------------------------------
 -- Params

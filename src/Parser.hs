@@ -209,20 +209,21 @@ fcall :: Parser Expr
 fcall = do
   id <- identifier
   symbol "("
+  args <- expr `sepBy` (symbol ",")
   symbol ")"
-  return $ FCall id
+  return $ FCall id args
 
 -- Parses a type
 -- type : 'int'
 --      | 'void' ;
 tpe :: Parser Type
 tpe = do
-  tp <- nonPtrs
+  tp <- pureTpe
   foldr (const Pntr) tp <$> (many (symbol "*"))
 
 -- Types with no pointers
-nonPtrs :: Parser Type
-nonPtrs =
+pureTpe :: Parser Type
+pureTpe =
   (CInt  <$ lexeme (try ((chunk "int" <* notFollowedBy (idStart <|> idRest)))))
   <|> (CChar <$ lexeme (chunk "char" <* notFollowedBy (idStart <|> idRest)))
   <|> (CVoid <$ lexeme (chunk "void" <* notFollowedBy (idStart <|> idRest)))
