@@ -132,19 +132,19 @@ lvalue = (lexeme . try) (identifier <* (char '=') <* notFollowedBy (char '='))
 
 -- Parses a single statement
 -- stmt : block
+--      | print int
 --      | exprStmt
 --      | ifElse
 --      | while
 --      | return
---      | print int
 --      | null ;
 stmt :: Parser Stmt
 stmt =  BlockStmt <$> block
+    <|> try prnt
     <|> try exprStmt
     <|> ifElse
     <|> while
     <|> ret
-    <|> prnt
     <|> nullStmt
 
 -- Parses a single program block

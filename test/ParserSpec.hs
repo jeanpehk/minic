@@ -93,10 +93,15 @@ spec = do
     it "should parse as eq expr" $
       parse expr  "" "a==3" `shouldParse` BinOp Eq (Var "a") (IntConst 3)
 
-  let ans = FCall "noArgsFunc"
+  let ans = FCall "noArgsFunc" []
   describe "Function call without args" $ do
     it "should parse" $
       parse expr "" "noArgsFunc() ;" `shouldParse` ans
+
+  let ans = FCall "ArgsFunc" [IntConst 3, IntConst 2]
+  describe "Function call with int const args" $ do
+    it "should parse" $
+      parse expr "" "ArgsFunc(3, 2) ;" `shouldParse` ans
 
 -- statements
 

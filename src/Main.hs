@@ -43,13 +43,13 @@ handleProg fn = do
   case parse tunit fn program of
     Left err  -> putStr (errorBundlePretty err)
     Right res -> do
-                  pPrint res
+                  --pPrint res
                   case runChecker res of
                     (Left err, _)  -> putStrLn $ show err
                     (Right _, st) -> do
                                       let ast = fst (runGen fn res)
-                                      putStrLn $ L.unpack $ ppllvm $ ast
-                                      toLLVM "a.out" ast
+                                      --putStrLn $ L.unpack $ ppllvm $ ast
+                                      toLLVM "minic" ast
 
 -- Starts a REPL that prints out inputs in LLVM text format
 repl :: IO ()
