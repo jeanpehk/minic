@@ -6,19 +6,18 @@ and [llvm-hs](https://github.com/llvm-hs/llvm-hs) for code generation.
 ## Goals
 
 This compiler was written for a university compiler construction course and
-as a learning experiment. The compiler is written in a fairly straightforward way, and
+as a learning experiment. The compiler is written in a fairly straightforward way and
 can be of use to someone trying to write a compiler using the modern Haskell LLVM bindings.
 
 ## Features
 
 Current features of the compiler include:
 
-* Functions definitions
-* Function calls
+* Functions (no forward declarations)
 * Parameters, return statements
 * Recursion
-* Main function with command line arguments
-* If else statements
+* Command line arguments for main function
+* If Else statements
 * While statements
 * Line (//) and block (/\*\*/) comments
 * Globals
