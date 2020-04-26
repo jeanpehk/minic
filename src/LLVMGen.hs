@@ -5,15 +5,14 @@
 
 module LLVMGen where
 
-import Data.Text.Lazy.IO as T
-import qualified Data.Text.Lazy as L
+import qualified AST as Mc
+import LLVMEnv
 
 import Data.Char
+import Data.Text.Lazy.IO as T
+import qualified Data.Text.Lazy as L
 import Data.String
 import Data.Word
-
-import qualified AST as Mc
-
 import Control.Monad.State
 import qualified Data.Map as Map
 
@@ -31,109 +30,6 @@ import qualified LLVM.IRBuilder.Monad as IR
 -- Construct the Haskell LLVM AST representation.
 
 ------------------------------------------------------------
--- Datatypes
-------------------------------------------------------------
-
-type Generator = IR.ModuleBuilderT (State Env)
-
-data Env = Env { active :: ST, rest :: [ST]
-               , funcs :: Map.Map String AST.Operand
-               , funcHasRet :: Bool }
-  deriving (Eq, Show)
-
-newtype ST = ST { getST :: Map.Map String AST.Operand }
-  deriving (Eq, Show)
-
-
--- Simple test function
-test :: IO ()
-test = do
-  let res = snd $
-            runGen "test" (Mc.TUnit [(Mc.GDecl (Mc.Decl Mc.CInt "hello"))
-                          , (Mc.FDef (Mc.Func Mc.CInt "func"
-                            [Mc.Param Mc.CInt "ok", Mc.Param Mc.CInt "abc"]
-                              (Mc.Block
-                                [Left (Mc.Decl Mc.CInt "abc3"),
-                                 Right (Mc.ExprStmt (Mc.Var "abci"))])))])
-  Prelude.putStrLn $ show res
-
-------------------------------------------------------------
--- Helper functions for building an LLVM Module
-------------------------------------------------------------
-
-constInt32 :: Int -> AST.Operand
-constInt32 n = AST.ConstantOperand $ AST.Int (fromIntegral 32) (fromIntegral n)
-
--- Change type from own AST into LLVM
-decideType :: Mc.Type -> AST.Type
-decideType Mc.CInt   = AST.i32
-decideType Mc.CChar  = AST.i8
-decideType Mc.CVoid  = AST.void
-decideType (Mc.Pntr p) = AST.ptr (decideType p)
-
--- Turns a minic param into llvm param
-mkParam :: Mc.Param -> (AST.Type, IR.ParameterName)
-mkParam (Mc.Param Mc.CInt id)     = (AST.i32, IR.ParameterName (fromString id))
-mkParam (Mc.Param Mc.CChar id)    = (AST.i8, IR.ParameterName (fromString id))
-mkParam (Mc.Param (Mc.Pntr p) id) =
-  (decideType (Mc.Pntr p), IR.ParameterName (fromString id))
-mkParam (Mc.ParamNoId _)          = error "TODO"
-mkParam (Mc.Param Mc.CVoid _)     = error "Can't have param with void type and id"
-
--- Add params to Symbol Table
-paramsToST :: ST -> [Mc.Param] -> [AST.Operand] -> ST
-paramsToST st (x:xs) (y:ys) = let insert i o = ST $ Map.insert (Mc.getPID i) o (getST st)
-                              in paramsToST (insert x y) xs ys
-paramsToST st [] _ = st
-paramsToST st _ [] = st
-
--- Add new var to active Symbol Table
-addToActive :: ST -> String -> AST.Operand -> ST
-addToActive st id op = case Map.lookup id (getST st) of
-                           Nothing -> ST $ Map.insert id op (getST st)
-                           Just x  -> error $ "Id: " ++ id ++ " already declared"
-
--- New active for Env to avoid name collisions
--- when moving into a new block in the source language.
-newActive :: Env -> Env
-newActive env = Env { active = ST Map.empty, rest = active env:rest env
-                    , funcs = funcs env
-                    , funcHasRet = funcHasRet env }
-
--- Drop active ST from Env when moving out of a block
--- in the source language.
-dropActive :: Env -> Env
-dropActive env = case rest env of
-                  []     -> Env { active = ST Map.empty, rest = []
-                                , funcs = funcs env
-                                , funcHasRet = funcHasRet env }
-                  (x:xs) -> Env { active = x, rest = xs
-                                , funcs = funcs env
-                                , funcHasRet = funcHasRet env }
-
--- Get id from Environment, excluding functions
-idFromEnv :: String -> Env -> AST.Operand
-idFromEnv id env = case Map.lookup id (getST (active env)) of
-                      Nothing -> lookUpRest (rest env)
-                      Just x  -> x
-  where
-    lookUpRest (r:rs) = case Map.lookup id (getST r) of
-                          Nothing -> lookUpRest rs
-                          Just x  -> x
-    lookUpRest [] = error $ "Var: " ++ id ++ " not found in listed Env"
-
--- Get function from Env
-funcFromEnv :: String -> Env -> AST.Operand
-funcFromEnv id env = case Map.lookup id (funcs env) of
-                      Nothing -> error $ "Function: '" ++ id ++ "' not found"
-                      Just x  -> x
-
-getName :: AST.Operand -> AST.Name
-getName op = case op of
-               AST.LocalReference tpe nm -> nm
-               _                         -> error "Only local refs supported"
-
-------------------------------------------------------------
 -- LLVM AST Generation
 ------------------------------------------------------------
 
@@ -141,6 +37,7 @@ runGen :: String -> Mc.TUnit -> (AST.Module, Env)
 runGen nm tunit = runState (IR.buildModuleT (fromString nm) (codeGen tunit)) env
   where
     env = Env { active = ST Map.empty, rest = []
+              , externs = Map.empty
               , funcs = Map.empty
               , funcHasRet = False }
 
@@ -150,6 +47,8 @@ runGen nm tunit = runState (IR.buildModuleT (fromString nm) (codeGen tunit)) env
 
 codeGen :: Mc.TUnit -> Generator ()
 codeGen (Mc.TUnit tls) = do
+  prnt <- IR.extern (AST.mkName "print") [AST.i32] AST.void
+  addExtern prnt
   let x = \y -> case y of
                   (Mc.GDecl decl) -> genGlobalDecl decl
                   (Mc.FDef func)  -> genFunc func
@@ -166,9 +65,7 @@ genGlobalDecl (Mc.Decl Mc.CVoid id) = error "Can't have void decl with id"
 genGlobalDecl (Mc.Decl tpe id) = do
   env <- get
   d <- IR.global (AST.mkName id) (decideType tpe) (AST.Int (fromIntegral 32) 0)
-  put $ Env { active = addToActive (active env) id d, rest = rest env
-            , funcs = funcs env
-            , funcHasRet = funcHasRet env}
+  addToActive id d
   return ()
 
 
@@ -182,60 +79,42 @@ genDecl (Mc.Decl tpe id) = do
     Mc.CChar  -> IR.alloca AST.i8 Nothing 1
     Mc.CVoid  -> error "Can't have void decl with id"
     Mc.Pntr p -> IR.alloca (decideType (Mc.Pntr p)) Nothing 8
-  put $ Env { active = addToActive (active env) id d, rest = rest env
-            , funcs = funcs env
-            , funcHasRet = funcHasRet env }
+  addToActive id d
   return ()
 
 ------------------------------------------------------------
 -- Functions
 ------------------------------------------------------------
 
+genFunc :: (MonadState Env m, IR.MonadModuleBuilder m, MonadFix m)
+        => Mc.Func
+        -> m ()
 genFunc (Mc.Func tpe id params block) = mdo
   let ps = map mkParam params
-  env <- get
-  -- Insert function to env using mdo to allow
-  -- recursive calls
-  put $ Env { active = active env, rest = rest env
-            , funcs = Map.insert id f (funcs env)
-            , funcHasRet = funcHasRet env }
+  -- Insert function to env using mdo to allow recursive calls
+  addFunc id f
 
   f <- IR.function (AST.mkName id) ps (decideType tpe) $ \ops -> do
-
+    newActive
     -- Add params to symboltable
-    env <- get
-    let envv = newActive env
-    put $ Env { active = paramsToST (active envv) params ops, rest = rest envv
-              , funcs = funcs envv
-              , funcHasRet = funcHasRet envv }
+    paramsToEnv params ops
     -- generate params
     gparams <- mapM genParam [(p, o) | p <- params | o <- ops]
-    nsWithParams <- get
-    -- add params to env
-    put $ Env { active = paramsToST (active nsWithParams) params gparams
-              , rest = rest nsWithParams
-              , funcs = funcs nsWithParams
-              , funcHasRet = funcHasRet nsWithParams }
+    -- add new generated params to env
+    paramsToEnv params gparams
 
-    let ff = \y -> case y of
+    let f = \y -> case y of
                     Left decl  -> genDecl decl
                     Right stmt -> genStmt stmt
 
-    mapM_ ff $ Mc.getBlock block
+    mapM_ f $ Mc.getBlock block
 
     -- Check whether return stmt is already generated
     envAfter <- get
     case funcHasRet envAfter of
-      False -> do
-                  IR.ret $ IR.int32 0
-                  return ()
-      True  -> do
-                  put $ Env { active = active envAfter
-                            , rest = rest envAfter
-                            , funcs = funcs env
-                            , funcHasRet = False }
-                  return ()
-
+      False -> IR.ret $ IR.int32 0
+      True  -> modify $ \e -> e { funcHasRet = False }
+  dropActive
   return ()
 
 ------------------------------------------------------------
@@ -247,15 +126,12 @@ genStmt :: (MonadState Env m, IR.MonadModuleBuilder m, IR.MonadIRBuilder m, Mona
         => Mc.Stmt
         -> m ()
 genStmt (Mc.BlockStmt bl) = do
-  env <- get
-  let envv = newActive env
-  put $ Env { active = active envv, rest = rest envv
-            , funcs = funcs env
-            , funcHasRet = funcHasRet envv }
+  newActive
   let f = \y -> case y of
                   Left decl  -> genDecl decl
                   Right stmt -> genStmt stmt
   mapM_ f $ Mc.getBlock bl
+  dropActive
   return ()
 
 -- Expr statements
@@ -299,10 +175,7 @@ genStmt (Mc.While expr stmt) = mdo
 
 -- Return statements
 genStmt (Mc.Return x) = do
-  env <- get
-  put $ Env { active = active env, rest = rest env
-            , funcs = funcs env
-            , funcHasRet = True }
+  modify $ \env -> env { funcHasRet = True }
   case x of
     Nothing -> do
                 IR.retVoid
@@ -313,8 +186,9 @@ genStmt (Mc.Return x) = do
 -- Print statements
 genStmt (Mc.Print expr) = do
   e <- genExpr expr
-  prnt <- IR.extern (AST.mkName "print") [AST.i32] AST.void
-  IR.call prnt [(e, [])]
+  env <- get
+  let op = getPrint env
+  IR.call op [(e, [])]
   return ()
 
 -- Null statements
@@ -371,6 +245,9 @@ genExpr (Mc.FCall id args) = do
 -- Params
 ------------------------------------------------------------
 
+genParam :: (MonadState Env m, IR.MonadModuleBuilder m, IR.MonadIRBuilder m)
+        => (Mc.Param, AST.Operand)
+        -> m AST.Operand
 genParam ((Mc.Param _ id), (AST.LocalReference tpe nm)) = do
   env <- get
   let op = idFromEnv id env

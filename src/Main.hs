@@ -35,10 +35,11 @@ main = do
   args <- getArgs
   case args of
     []     -> repl
-    (x:xs) -> handleProg x
+    (x:xs) -> compileProg x
 
--- Handle given program.
-handleProg fn = do
+-- compile given program.
+compileProg :: FilePath -> IO ()
+compileProg fn = do
   program <- readFile fn
   case parse tunit fn program of
     Left err  -> putStr (errorBundlePretty err)

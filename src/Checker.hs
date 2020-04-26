@@ -3,118 +3,12 @@
 module Checker where
 
 import AST
+import CheckerEnv
 import Control.Monad.Except
 import Control.Monad.State
 import qualified Data.Map as Map
 
 -- Type and context checking for minic.
-
-------------------------------------------------------------
--- Datatypes
-------------------------------------------------------------
-
-type Checker a = ExceptT Error (State Env) a
-
-data SymbolTable = ST { getSt :: Map.Map Id Type }
-  deriving (Eq, Show)
-
--- Type environment for the program
-data Env = Env { active :: SymbolTable
-               , blocks :: [SymbolTable]
-               , funcs  :: Map.Map Id (Type, [Param])
-               , used   :: [SymbolTable] }
-  deriving (Eq, Show)
-
--- Error datatypes
-data Error
-  = TError String            -- General type errors
-  | SError String            -- Syntax errors
-  deriving (Eq, Show)
-
-------------------------------------------------------------
--- Helper functions for Checker
-------------------------------------------------------------
-
--- Error text for declaration errors
-dError :: Id -> String
-dError id = "id: '" ++ id ++ "' already declared"
-
--- Adds a new block into Env and makes it active
-addBlock :: Env -> Env
-addBlock (Env active blocks funcs used) = Env (ST Map.empty) (active:blocks)
-                                              funcs used
-
--- Drops the current active block active ones
-dropBlock :: Env -> Env
-dropBlock env = case blocks env of
-                  (x:xs) -> Env { active = x, blocks = xs
-                                , funcs = funcs env
-                                , used   = active env:used env }
-                  []     -> Env { active = ST Map.empty, blocks = []
-                                , funcs = funcs env
-                                , used   = used env }
-
--- Look for id from blocks incase it is not in the active one
-lookFromBlocks :: Id -> [SymbolTable] -> Maybe Type
-lookFromBlocks id (x:xs) = case Map.lookup id (getSt x) of
-                             Nothing -> lookFromBlocks id xs
-                             Just x  -> Just x
-lookFromBlocks id []  = Nothing
-
--- Look for id from active symbol table
--- Used for declaring values
-getId :: Id -> Env -> Maybe Type
-getId id env = Map.lookup id (getSt (active env))
-
--- Get types of already declared variables from the entire Env
-getDeclaredId :: Id -> Env -> Maybe Type
-getDeclaredId id env = case Map.lookup id st of
-                 Nothing -> case lookFromBlocks id (blocks env) of
-                              Nothing -> do
-                                          r <- Map.lookup id (funcs env)
-                                          return $ fst r
-                              Just x  -> Just x
-                 Just x  -> Just x
-  where
-    st = getSt (active env)
-
--- Look for id from functions
--- Used for declaring functions
-getFunc :: Id -> Env -> Maybe Type
-getFunc id env = case Map.lookup id (funcs env) of
-                   Nothing -> Map.lookup id $ getSt (active env)
-                   Just x  -> Just $ fst x
-
--- Add a new identifier into the environment
-addId :: Type -> Id -> Env -> Env
-addId tpe id env = Env { active = ST (Map.insert id tpe (getSt (active env)))
-                            , blocks = blocks env
-                            , funcs  = funcs env
-                            , used   = used env }
-
-addFunc :: Type -> [Param] -> Id -> Env -> Env
-addFunc tpe ps id env = Env { active = active env
-                              , blocks = blocks env
-                              , funcs = Map.insert id (tpe, ps) (funcs env)
-                              , used = used env}
-
-------------------------------------------------------------
--- Type comparisons for expressions
-------------------------------------------------------------
-
-compareTypes :: Type -> Type -> Either Error Type
-compareTypes (CInt) (CInt) = Right CInt
-compareTypes (CChar) (CChar) = Right CInt
-compareTypes (CChar) (CInt) = Right CInt
-compareTypes (CInt) (CChar) = Right CInt
-compareTypes (Pntr a) (Pntr b) =
-  case compareTypes a b of
-    Left err -> Left err
-    Right t  -> Right $ Pntr t
-compareTypes _ (Pntr _) = Left $ TError "Cannot combine ptr with non ptr"
-compareTypes (Pntr _) _ = Left $ TError "Cannot combine ptr with non ptr"
-compareTypes (CVoid) _ = Left $ TError "Cannot combine Void with another type"
-compareTypes _ (CVoid) = Left $ TError "Cannot combine Void with another type"
 
 ------------------------------------------------------------
 -- Check program
@@ -143,7 +37,7 @@ checkTl (GDecl (Decl CVoid _)) = throwError $ SError "Void cannot have an identi
 checkTl gd@(GDecl (Decl tpe id)) = do
   env <- get
   case getId id env of
-    Nothing -> put $ addId tpe id env
+    Nothing -> addId tpe id
     Just x  -> throwError $ TError (dError id)
   return gd
 
@@ -155,10 +49,9 @@ checkTl (FDef (Func tpe id params block)) = mdo
   env <- get
   -- Add id first into functions in env
   case getFunc id env of
-    Nothing -> put $ addFunc tpe params id env
+    Nothing -> addFunc tpe params id
     Just x  -> throwError $ TError (dError id)
-  nenv <- get
-  put $ addBlock nenv
+  addBlock
   ps <- mapM checkParam params
   let f = \y -> case y of
             Left d  -> do
@@ -168,8 +61,7 @@ checkTl (FDef (Func tpe id params block)) = mdo
                         stmt <- checkStmt s
                         return $ Right stmt
   bls <- mapM f (getBlock block)
-  nnenv <- get
-  put $ dropBlock nnenv
+  dropBlock
   return $ FDef (Func tpe id ps (Block bls))
 
 ------------------------------------------------------------
@@ -183,7 +75,7 @@ checkParam (ParamNoId tpe  ) = throwError $ TError "Non-void param needs an iden
 checkParam p@(Param tpe id) = do
   env <- get
   case getId id env of
-    Nothing -> put $ addId tpe id env
+    Nothing -> addId tpe id
     Just x  -> throwError $ TError (dError id)
   return p
 
@@ -194,7 +86,7 @@ checkParam p@(Param tpe id) = do
 checkBlock :: Block -> Checker Block
 checkBlock (Block ds) = do
   env <- get
-  put $ addBlock env
+  addBlock
   let f = \y -> case y of
              Left d  -> do
                          decl <- checkDecl d
@@ -205,7 +97,7 @@ checkBlock (Block ds) = do
   get
   bls <- mapM f ds
   nnenv <- get
-  put $ dropBlock nnenv
+  dropBlock
   return $ Block bls
 
 ------------------------------------------------------------
@@ -263,7 +155,7 @@ checkDecl (Decl CVoid _ ) = throwError $ SError "Void cannot have an identifier"
 checkDecl d@(Decl tpe id) = do
   env <- get
   case getId id env of
-    Nothing -> put $ addId tpe id env
+    Nothing -> addId tpe id
     Just x  -> throwError $ TError (dError id)
   return d
 

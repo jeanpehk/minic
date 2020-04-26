@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 15fcec213e8df7ac3f481acde3c829656324bda0a94209adc8c91af5762d1d79
+-- hash: a72daccb59522730a7bb6d3a39e578b9ef84549e4f65a4d89faa9eac5a49d3dc
 
 name:           minic
 version:        0.1.0.0
@@ -28,6 +28,8 @@ library
   exposed-modules:
       AST
       Checker
+      CheckerEnv
+      LLVMEnv
       LLVMGen
       Main
       Parser
@@ -55,6 +57,8 @@ executable minic-exe
   other-modules:
       AST
       Checker
+      CheckerEnv
+      LLVMEnv
       LLVMGen
       Parser
       Paths_minic
