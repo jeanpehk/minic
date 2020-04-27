@@ -75,6 +75,12 @@ spec = do
         checkRes (TUnit [FDef (Func CVoid "f" []
                                 (Block [Left (Decl CInt "a")
                                       , Right Null
+                                      , Left (Decl (Array 2 CInt) "a")]))])
+        `shouldBe` Left (TError (dError "a"))
+      it "decls in the same block can't have same names (where one is array)" $
+        checkRes (TUnit [FDef (Func CVoid "f" []
+                                (Block [Left (Decl CInt "a")
+                                      , Right Null
                                       , Left (Decl CInt "a")]))])
         `shouldBe` Left (TError (dError "a"))
       it "decl in the primary func block can't have same name as func param" $

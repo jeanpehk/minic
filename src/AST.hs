@@ -67,6 +67,7 @@ data Type
   | CChar
   | CVoid
   | Pntr Type
+  | Array Int Type
   deriving (Eq, Show)
 
 type Id

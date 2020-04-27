@@ -46,6 +46,10 @@ int = lexeme L.decimal
 parens :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")
 
+-- Helper to parse something between square brackets
+squares :: Parser a -> Parser a
+squares = between (symbol "[") (symbol "]")
+
 -- Parser for a single translation unit (i.e, a single source code file)
 -- Parses multiple top level declarations and definitions
 -- tunit : topLevel* ;
@@ -66,7 +70,13 @@ topLevel =  try (GDecl <$> decl)
 -- Parser for basic declarations
 -- decl : type id ';' ;
 decl :: Parser Decl
-decl = Decl <$> tpe <*> (identifier <* lexeme (char ';'))
+decl = do
+  t <- tpe
+  i <- identifier
+  -- Add arrays if needed
+  tt <- foldr (\e -> Array e) t <$> (many (squares int))
+  symbol ";"
+  return $ Decl tt i
 
 -- Parser for functions
 -- func : type id params block expr?;

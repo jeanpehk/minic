@@ -51,6 +51,17 @@ spec = do
     it "parses" $
       parse tpe "" "void * *" `shouldParse` Pntr (Pntr CVoid)
 
+-- declarations
+  describe "simple array declaration" $ do
+    it "parses" $
+      parse decl "" "int a[2] ; " `shouldParse` Decl (Array 2 CInt) "a"
+  let ans = Decl (Array 1
+                 (Array 2
+                 (Array 3 CInt))) "a"
+  describe "multiple arrays in declaration" $ do
+    it "parses" $
+      parse decl "" "int a[1][2][3] ; " `shouldParse` ans
+
 -- expressions
 
   let ans = BinOp Subtr (BinOp Add (BinOp Mul (IntConst 2) (IntConst 3)) (IntConst 2))

@@ -33,8 +33,8 @@ import qualified LLVM.IRBuilder.Monad as IR
 -- LLVM AST Generation
 ------------------------------------------------------------
 
-runGen :: String -> Mc.TUnit -> (AST.Module, Env)
-runGen nm tunit = runState (IR.buildModuleT (fromString nm) (codeGen tunit)) env
+runGen :: String -> Mc.TUnit -> AST.Module
+runGen nm tunit = fst $ runState (IR.buildModuleT (fromString nm) (codeGen tunit)) env
   where
     env = Env { active = ST Map.empty, rest = []
               , externs = Map.empty
@@ -45,7 +45,7 @@ runGen nm tunit = runState (IR.buildModuleT (fromString nm) (codeGen tunit)) env
 -- Translation units
 ------------------------------------------------------------
 
-codeGen :: Mc.TUnit -> Generator ()
+codeGen :: Mc.TUnit -> LLVMGen ()
 codeGen (Mc.TUnit tls) = do
   prnt <- IR.extern (AST.mkName "print") [AST.i32] AST.void
   addExtern prnt
@@ -59,26 +59,24 @@ codeGen (Mc.TUnit tls) = do
 ------------------------------------------------------------
 
 genGlobalDecl :: (MonadState Env m, IR.MonadModuleBuilder m)
-        => Mc.Decl
-        -> m ()
+              => Mc.Decl
+              -> m ()
 genGlobalDecl (Mc.Decl Mc.CVoid id) = error "Can't have void decl with id"
 genGlobalDecl (Mc.Decl tpe id) = do
-  env <- get
   d <- IR.global (AST.mkName id) (decideType tpe) (AST.Int (fromIntegral 32) 0)
   addToActive id d
   return ()
-
 
 genDecl :: (MonadState Env m, IR.MonadModuleBuilder m, IR.MonadIRBuilder m)
         => Mc.Decl
         -> m ()
 genDecl (Mc.Decl tpe id) = do
-  env <- get
   d <- case tpe of
-    Mc.CInt   -> IR.alloca AST.i32 Nothing 4
-    Mc.CChar  -> IR.alloca AST.i8 Nothing 1
-    Mc.CVoid  -> error "Can't have void decl with id"
-    Mc.Pntr p -> IR.alloca (decideType (Mc.Pntr p)) Nothing 8
+    Mc.CInt           -> IR.alloca AST.i32 Nothing 4
+    Mc.CChar          -> IR.alloca AST.i8 Nothing 1
+    Mc.CVoid          -> error "Can't have void decl with id"
+    pn@(Mc.Pntr p)    -> IR.alloca (decideType pn) Nothing 8
+    ar@(Mc.Array c t) -> IR.alloca (decideType ar) Nothing 16
   addToActive id d
   return ()
 
@@ -91,10 +89,12 @@ genFunc :: (MonadState Env m, IR.MonadModuleBuilder m, MonadFix m)
         -> m ()
 genFunc (Mc.Func tpe id params block) = mdo
   let ps = map mkParam params
-  -- Insert function to env using mdo to allow recursive calls
-  addFunc id f
 
+  -- Insert function to env using mdo to allow
+  -- recursive calls
+  addFunc id f
   f <- IR.function (AST.mkName id) ps (decideType tpe) $ \ops -> do
+
     newActive
     -- Add params to symboltable
     paramsToEnv params ops
@@ -254,5 +254,5 @@ genParam ((Mc.Param _ id), (AST.LocalReference tpe nm)) = do
   addr <- IR.alloca tpe Nothing 8
   IR.store addr 8 op
   return addr
-genParam _ = error "There should be only local refs in params"
+genParam _ = error "Internal error: There should be only local refs in params"
 

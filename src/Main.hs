@@ -48,7 +48,7 @@ compileProg fn = do
                   case runChecker res of
                     (Left err, _)  -> putStrLn $ show err
                     (Right _, st) -> do
-                                      let ast = fst (runGen fn res)
+                                      let ast = runGen fn res
                                       --putStrLn $ L.unpack $ ppllvm $ ast
                                       toLLVM "minic" ast
 
@@ -73,7 +73,7 @@ repl = do
                           case runChecker res of
                             (Left  err, _) -> do {outputStrLn $ show err; loop}
                             (Right _, st) -> do
-                              let ast = fst (runGen "repl" res)
+                              let ast = runGen "repl" res
                               outputStrLn $ L.unpack $ ppllvm ast
                               loop
 

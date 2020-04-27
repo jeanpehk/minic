@@ -151,7 +151,17 @@ checkStmt Null = return Null
 ------------------------------------------------------------
 
 checkDecl :: Decl -> Checker Decl
-checkDecl (Decl CVoid _ ) = throwError $ SError "Void cannot have an identifier"
+checkDecl (Decl CVoid _)  = throwError $ SError "Void cannot have an identifier"
+checkDecl d@(Decl (Array c tpe) id) = do
+  case tpe of
+    CVoid -> throwError $ TError "Declared array of voids"
+    _     -> do
+              env <- get
+              case getId id env of
+                Nothing -> addId tpe id
+                Just x  -> throwError $ TError (dError id)
+              return d
+ 
 checkDecl d@(Decl tpe id) = do
   env <- get
   case getId id env of
@@ -179,13 +189,12 @@ checkExpr e@(CharConst c) = return (e, CChar)
 checkExpr e@(BinOp op e1 e2) = do
   ce1 <- checkExpr e1
   ce2 <- checkExpr e2
-  case compareTypes (snd ce1) (snd ce2) of
-    Left err -> throwError err
-    Right x  -> case x of
-                  -- Change type of BinOp if needed so
-                  -- we know when coercions are needed
-                  CInt -> return (e, x)
-                  _    -> throwError $ SError "Only Int BinOps supported"
+  tpe <- comp (snd ce1) (snd ce2)
+  case tpe of
+    -- Change type of BinOp if needed so
+    -- we know when coercions are needed
+    CInt -> return (e, tpe)
+    _    -> throwError $ SError "Only Int BinOps supported"
 
 -- Assignment
 checkExpr e@(Assign id expr) = do
@@ -193,10 +202,9 @@ checkExpr e@(Assign id expr) = do
   case getDeclaredId id env of
     Nothing -> throwError $ TError ("Var not declared: " ++ id)
     Just x  -> do
-      etype <- checkExpr expr
-      case compareTypes x (snd etype) of
-        Left err -> throwError err
-        Right x  -> return (e, x)
+      ce <- checkExpr expr
+      tpe <- comp x (snd ce)
+      return (e, tpe)
 
 -- Function calls
 checkExpr e@(FCall id args) = do
@@ -210,10 +218,29 @@ checkExpr e@(FCall id args) = do
 
 -- Check function call parameters
 fparams :: [Param] -> [Type] -> Checker ()
-fparams (x:xs) (y:ys) = case compareTypes (getType x) y of
-                          Left err -> throwError $ err
-                          Right tp -> fparams xs ys
+fparams (x:xs) (y:ys) = do
+  tpe <- comp (getType x) y
+  fparams xs ys
 fparams [] (y:ys) = throwError $ TError "Incorrect amount of args in functions call"
 fparams (x:xs) [] = throwError $ TError "Incorrect amount of args in functions call"
 fparams [] [] = return ()
+
+------------------------------------------------------------
+-- Type comparisons for expressions
+------------------------------------------------------------
+
+comp :: Type -> Type -> Checker Type
+comp (CInt) (CInt) = return $ CInt
+comp (CChar) (CChar) = return $ CInt
+comp (CChar) (CInt) = return $ CInt
+comp (CInt) (CChar) = return $ CInt
+comp (Pntr a) (Pntr b) = do
+  r <- comp a b
+  return $ Pntr r
+comp (Array c1 t1) _ = throwError $ TError "Cannot combine arrays"
+comp _ (Array c1 t1) = throwError $ TError "Cannot combine arrays"
+comp _ (Pntr _) = throwError $ TError "Cannot combine ptr with non ptr"
+comp (Pntr _) _ = throwError $ TError "Cannot combine ptr with non ptr"
+comp (CVoid) _ = throwError $ TError "Cannot combine Void with another type"
+comp _ (CVoid) = throwError $ TError "Cannot combine Void with another type"
 

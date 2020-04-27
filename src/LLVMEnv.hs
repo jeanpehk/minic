@@ -12,12 +12,13 @@ import qualified LLVM.AST as AST
 import qualified LLVM.AST.Constant as AST
 import qualified LLVM.AST.Type as AST
 import qualified LLVM.IRBuilder.Module as IR
+import qualified LLVM.IRBuilder.Monad as IR
 
 ------------------------------------------------------------
 -- Datatypes
 ------------------------------------------------------------
 
-type Generator = IR.ModuleBuilderT (State Env)
+type LLVMGen = IR.ModuleBuilderT (State Env)
 
 data Env = Env { active :: ST, rest :: [ST]
                , externs :: Map.Map String AST.Operand
@@ -41,13 +42,15 @@ decideType Mc.CInt   = AST.i32
 decideType Mc.CChar  = AST.i8
 decideType Mc.CVoid  = AST.void
 decideType (Mc.Pntr p) = AST.ptr (decideType p)
+decideType (Mc.Array c t) = AST.ArrayType (fromIntegral c) (decideType t)
 
 -- Turns a minic param into llvm param
 mkParam :: Mc.Param -> (AST.Type, IR.ParameterName)
 mkParam (Mc.Param Mc.CInt id)     = (AST.i32, IR.ParameterName (fromString id))
 mkParam (Mc.Param Mc.CChar id)    = (AST.i8, IR.ParameterName (fromString id))
-mkParam (Mc.Param (Mc.Pntr p) id) =
-  (decideType (Mc.Pntr p), IR.ParameterName (fromString id))
+mkParam (Mc.Param pntr@(Mc.Pntr p) id) =
+  (decideType pntr, IR.ParameterName (fromString id))
+mkParam (Mc.Param arr@(Mc.Array c t) id) = (decideType arr, fromString id)
 mkParam (Mc.ParamNoId _)          = error "TODO"
 mkParam (Mc.Param Mc.CVoid _)     = error "Can't have param with void type and id"
 
@@ -87,7 +90,8 @@ addExtern op = modify $ \env ->
 -- and it is always included.
 getPrint :: Env -> AST.Operand
 getPrint env = case Map.lookup "print" (externs env) of
-                Nothing -> error "Extern function print should always be in env"
+                Nothing -> error "Internal error: \
+                                 \Extern function print should always be in env"
                 Just op -> op
 
 -- New active for Env to avoid name collisions
