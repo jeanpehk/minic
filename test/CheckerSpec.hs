@@ -88,6 +88,18 @@ spec = do
                                 (Block [Left (Decl CInt "one")
                                       , Left (Decl CInt "two")]))])
         `shouldBe` Left (TError (dError "two"))
+      it "access index of an array" $
+        checkRes (TUnit [FDef (Func CVoid "ok" []
+                                (Block [Left (Decl (Array 5 CChar) "varri")
+                                      , Right (ExprStmt (VarArr "varri" 2))]))])
+        `shouldBe` Right (TUnit [FDef (Func CVoid "ok" []
+                                (Block [Left (Decl (Array 5 CChar) "varri")
+                                      , Right (ExprStmt (VarArr "varri" 2))]))])
+      it "can't access index of a char" $
+        checkRes (TUnit [FDef (Func CVoid "ok" []
+                                (Block [Left (Decl CChar "varri")
+                                      , Right (ExprStmt (VarArr "varri" 2))]))])
+        `shouldBe` Left (TError "Can only access index of an array")
       it "decl in a function block can have the same name as the func itself" $
         checkRes (TUnit [FDef (Func CVoid "MINE" []
                                 (Block [Left (Decl CInt "MINE")]))])

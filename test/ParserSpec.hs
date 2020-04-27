@@ -114,6 +114,10 @@ spec = do
     it "should parse" $
       parse expr "" "ArgsFunc(3, 2) ;" `shouldParse` ans
 
+  describe "Array identifier" $ do
+    it "parses" $
+      parse expr "" "a[  4 ]" `shouldParse` VarArr "a" 4
+
 -- statements
 
   let ans = While (BinOp Lt (Var "myvar") (IntConst 3)) (ExprStmt (Assign "myvar" (IntConst 3)))

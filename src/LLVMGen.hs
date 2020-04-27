@@ -207,6 +207,9 @@ genExpr (Mc.Var id) = do
   let op = idFromEnv id env
   IR.load op 8
 
+-- Array variables
+--genExpr (Mc.VarArr id inx) = do
+
 -- Int Constants
 genExpr (Mc.IntConst int) = return $ constInt32 int
 

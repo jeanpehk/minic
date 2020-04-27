@@ -45,6 +45,7 @@ data Stmt
 
 data Expr
   = Var Id
+  | VarArr Id Int -- Array variables
   | IntConst Int
   | CharConst Char
   | BinOp Op Expr Expr

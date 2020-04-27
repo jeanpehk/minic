@@ -152,13 +152,13 @@ checkStmt Null = return Null
 
 checkDecl :: Decl -> Checker Decl
 checkDecl (Decl CVoid _)  = throwError $ SError "Void cannot have an identifier"
-checkDecl d@(Decl (Array c tpe) id) = do
+checkDecl d@(Decl a@(Array c tpe) id) = do
   case tpe of
     CVoid -> throwError $ TError "Declared array of voids"
     _     -> do
               env <- get
               case getId id env of
-                Nothing -> addId tpe id
+                Nothing -> addId a id
                 Just x  -> throwError $ TError (dError id)
               return d
  
@@ -180,6 +180,15 @@ checkExpr e@(Var id) = do
   case getDeclaredId id env of
     Nothing -> throwError $ TError (dError id)
     Just x  -> return (e, x)
+
+-- Array variables
+checkExpr e@(VarArr id inx) = do
+  env <- get
+  case getDeclaredId id env of
+    Nothing -> throwError $ TError (dError id)
+    Just x  -> case x of
+                Array c tpe -> return (e, x)
+                _           -> throwError $ TError "Can only access index of an array"
 
 -- Constants
 checkExpr e@(IntConst i)  = return (e, CInt)

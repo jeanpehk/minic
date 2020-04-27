@@ -113,7 +113,8 @@ exprArith = makeExprParser term operatorTable
 term :: Parser Expr
 term = parens expr
     <|> try fcall
-    <|> variable
+    <|> do
+          variable
     <|> constant
 
 -- Helper to write binops for op table
@@ -240,7 +241,8 @@ pureTpe =
 
 -- Parses a single variable
 variable :: Parser Expr
-variable = Var <$> (identifier)
+variable = try (VarArr <$> identifier <*> squares int)
+        <|> Var <$> identifier
 
 -- character constant, e.g 'k'
 charConst :: Parser Char
