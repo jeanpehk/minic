@@ -1,6 +1,7 @@
 module CheckerSpec where
 
 import AST
+import IAST
 import Checker
 import CheckerEnv
 import Control.Monad.Except
@@ -22,7 +23,8 @@ spec = do
   describe "TUnit" $ do
     describe "Decls" $ do
       it "single int with id returns no errors" $
-        checkRes (TUnit [(GDecl (Decl CInt "a"))]) `shouldBe` Right (TUnit [(GDecl (Decl CInt "a"))])
+        checkRes (TUnit [(GDecl (Decl CInt "a"))])
+        `shouldBe` Right (ITUnit [(IGlobal (IDecl CInt "a"))])
       it "void cannot have an id in a decl" $
         checkRes (TUnit [(GDecl (Decl CVoid "ok"))])
         `shouldBe` Left (SError "Void cannot have an identifier")
@@ -33,7 +35,7 @@ spec = do
 
     describe "Functions" $ do
       it "void function is allowed" $
-        checkRes (TUnit [FDef (Func CVoid "hey" [] (Block []))]) `shouldBe` Right (TUnit [FDef (Func CVoid "hey" [] (Block []))])
+        checkRes (TUnit [FDef (Func CVoid "hey" [] (Block []))]) `shouldBe` Right (ITUnit [IFDef (IFunc CVoid "hey" [] (IBlock []))])
       it "Functions with same not allowed" $
         checkRes (TUnit [FDef (Func CVoid "hey" [] (Block []))
                        , FDef (Func CVoid "hey" [] (Block []))])
@@ -45,10 +47,10 @@ spec = do
       it "Function can have same name as its param" $
 
         checkRes (TUnit [FDef (Func CVoid "test" [Param CInt "test"] (Block []))])
-        `shouldBe` Right (TUnit [FDef (Func CVoid "test" [Param CInt "test"] (Block []))])
+        `shouldBe` Right (ITUnit [IFDef (IFunc CVoid "test" [IParam CInt "test"] (IBlock []))])
       it "Function with single void param is ok" $
         checkRes (TUnit [FDef (Func CVoid "test" [ParamNoId CVoid] (Block []))])
-        `shouldBe` Right (TUnit [FDef (Func CVoid "test" [ParamNoId CVoid] (Block []))])
+        `shouldBe` Right (ITUnit [IFDef (IFunc CVoid "test" [] (IBlock []))])
       it "Function with named void param is not correct" $
         checkRes (TUnit [FDef (Func CVoid "test" [Param CVoid "ok"] (Block []))])
         `shouldBe` Left (TError ("Void param cannot have an identifier"))
@@ -61,16 +63,16 @@ spec = do
         checkRes (TUnit [ GDecl (Decl CInt "a")
                        ,  FDef  (Func CVoid "f" []
                                 (Block [Left (Decl CInt "a")]))])
-        `shouldBe` Right (TUnit [ GDecl (Decl CInt "a")
-                       ,  FDef  (Func CVoid "f" []
-                                (Block [Left (Decl CInt "a")]))])
+        `shouldBe` Right (ITUnit [IGlobal (IDecl CInt "a")
+                         ,IFDef  (IFunc CVoid "f" []
+                                (IBlock [Left (IDecl CInt "a")]))])
       it "decls in different blocks can have the same name" $
         checkRes (TUnit [FDef (Func CVoid "f" []
                                 (Block [Right (BlockStmt (Block [Left (Decl CInt "a")])),
                                 Right (BlockStmt (Block [Left (Decl CInt "a")]))]))])
-        `shouldBe` Right (TUnit [FDef (Func CVoid "f" []
-                                (Block [Right (BlockStmt (Block [Left (Decl CInt "a")])),
-                                Right (BlockStmt (Block [Left (Decl CInt "a")]))]))]) 
+        `shouldBe` Right (ITUnit [IFDef (IFunc CVoid "f" []
+                                (IBlock [Right (IBlockS (IBlock [Left (IDecl CInt "a")])),
+                                Right (IBlockS (IBlock [Left (IDecl CInt "a")]))]))]) 
       it "decls in the same block can't have same names" $
         checkRes (TUnit [FDef (Func CVoid "f" []
                                 (Block [Left (Decl CInt "a")
@@ -92,9 +94,10 @@ spec = do
         checkRes (TUnit [FDef (Func CVoid "ok" []
                                 (Block [Left (Decl (Array 5 CChar) "varri")
                                       , Right (ExprStmt (VarArr "varri" 2))]))])
-        `shouldBe` Right (TUnit [FDef (Func CVoid "ok" []
-                                (Block [Left (Decl (Array 5 CChar) "varri")
-                                      , Right (ExprStmt (VarArr "varri" 2))]))])
+        `shouldBe` Right (ITUnit [IFDef (IFunc CVoid "ok" []
+                                (IBlock [Left (IDecl (Array 5 CChar) "varri")
+                                      , Right (IExprS
+                                              (IVarA "varri" 2, (Array 5 CChar)))]))])
       it "can't access index of a char" $
         checkRes (TUnit [FDef (Func CVoid "ok" []
                                 (Block [Left (Decl CChar "varri")
@@ -103,8 +106,8 @@ spec = do
       it "decl in a function block can have the same name as the func itself" $
         checkRes (TUnit [FDef (Func CVoid "MINE" []
                                 (Block [Left (Decl CInt "MINE")]))])
-        `shouldBe` Right (TUnit [FDef (Func CVoid "MINE" []
-                                (Block [Left (Decl CInt "MINE")]))])
+        `shouldBe` Right (ITUnit [IFDef (IFunc CVoid "MINE" []
+                                (IBlock [Left (IDecl CInt "MINE")]))])
 
     describe "DeclsAndFuncs" $ do
       it "Function can't have same name as already declared var" $
@@ -114,18 +117,18 @@ spec = do
       it "Function can have param with same name as an earlier decl" $
         checkRes (TUnit [GDecl (Decl CInt "test")
                        , FDef (Func CVoid "nnN_32c" [Param CInt "test"] (Block []))])
-        `shouldBe` Right (TUnit [GDecl (Decl CInt "test")
-                       , FDef (Func CVoid "nnN_32c" [Param CInt "test"] (Block []))])
+        `shouldBe` Right (ITUnit [IGlobal (IDecl CInt "test")
+                       , IFDef (IFunc CVoid "nnN_32c" [IParam CInt "test"] (IBlock []))])
 
 -- expressions
   describe "Expr" $ do
     describe "Binops" $ do
       describe "Add" $
         it "two ints are ok" $
-          exprTest (BinOp Add (IntConst 5) (IntConst 0)) `shouldBe` Right ((BinOp Add (IntConst 5) (IntConst 0)), CInt)
+          exprTest (BinOp Add (IntConst 5) (IntConst 0)) `shouldBe` Right ((IBinOp Add (IIConst 5, CInt) (IIConst 0, CInt)), CInt)
 
     describe "Binops" $ do
       describe "Mul" $
         it "int and char are ok" $
-          exprTest (BinOp Mul (IntConst 5) (CharConst 'a')) `shouldBe` Right ((BinOp Mul (IntConst 5) (CharConst 'a')), CInt)
+          exprTest (BinOp Mul (IntConst 5) (CharConst 'a')) `shouldBe` Right ((IBinOp Mul (IIConst 5, CInt) (ICConst 'a', CChar)), CInt)
 

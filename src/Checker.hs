@@ -3,6 +3,7 @@
 module Checker where
 
 import AST
+import IAST
 import CheckerEnv
 import Control.Monad.Except
 import Control.Monad.State
@@ -14,7 +15,7 @@ import qualified Data.Map as Map
 -- Check program
 ------------------------------------------------------------
 
-runChecker :: TUnit -> (Either Error TUnit, Env)
+runChecker :: TUnit -> (Either Error ITUnit, Env)
 runChecker tunit = (runState . runExceptT) (checkTu tunit) env
   where
     env = Env { active = ST Map.empty, blocks = [], funcs = Map.empty, used = [] }
@@ -23,23 +24,23 @@ runChecker tunit = (runState . runExceptT) (checkTu tunit) env
 -- Translation unit
 ------------------------------------------------------------
 
-checkTu :: TUnit -> Checker TUnit
+checkTu :: TUnit -> Checker ITUnit
 checkTu (TUnit tl) = do
   tls <- mapM checkTl tl
-  return $ TUnit tls
+  return $ ITUnit tls
 
 ------------------------------------------------------------
 -- Top-level
 ------------------------------------------------------------
 
-checkTl :: TL -> Checker TL
+checkTl :: TL -> Checker ITL
 checkTl (GDecl (Decl CVoid _)) = throwError $ SError "Void cannot have an identifier"
-checkTl gd@(GDecl (Decl tpe id)) = do
+checkTl (GDecl (Decl tpe id)) = do
   env <- get
   case getId id env of
     Nothing -> addId tpe id
     Just x  -> throwError $ TError (dError id)
-  return gd
+  return $ IGlobal (IDecl tpe id)
 
 ------------------------------------------------------------
 -- Function
@@ -53,6 +54,7 @@ checkTl (FDef (Func tpe id params block)) = mdo
     Just x  -> throwError $ TError (dError id)
   addBlock
   ps <- mapM checkParam params
+  cps <- checkVoids ps
   let f = \y -> case y of
             Left d  -> do
                         decl <- checkDecl d
@@ -62,7 +64,7 @@ checkTl (FDef (Func tpe id params block)) = mdo
                         return $ Right stmt
   bls <- mapM f (getBlock block)
   dropBlock
-  return $ FDef (Func tpe id ps (Block bls))
+  return $ IFDef $ IFunc tpe id cps (IBlock bls)
 
 ------------------------------------------------------------
 -- Parameters
@@ -79,11 +81,16 @@ checkParam p@(Param tpe id) = do
     Just x  -> throwError $ TError (dError id)
   return p
 
+checkVoids :: [Param] -> Checker [IParam]
+checkVoids [(ParamNoId CVoid)] = return []
+checkVoids xs = case (ParamNoId CVoid) `elem` xs of
+                  False -> return $ map (\y -> IParam (getType y) (getPID y)) xs
+                  True  -> throwError $ TError "Void must be the only param"
 ------------------------------------------------------------
 -- Block
 ------------------------------------------------------------
 
-checkBlock :: Block -> Checker Block
+checkBlock :: Block -> Checker IBlock
 checkBlock (Block ds) = do
   env <- get
   addBlock
@@ -98,61 +105,61 @@ checkBlock (Block ds) = do
   bls <- mapM f ds
   nnenv <- get
   dropBlock
-  return $ Block bls
+  return $ IBlock bls
 
 ------------------------------------------------------------
 -- Statements
 ------------------------------------------------------------
 
 -- Block
-checkStmt :: Stmt -> Checker Stmt
+checkStmt :: Stmt -> Checker IStmt
 checkStmt (BlockStmt b) = do
   bl <- checkBlock b
-  return $ BlockStmt bl
+  return $ IBlockS bl
 
 -- Expression
 checkStmt (ExprStmt e) = do
   ce <- checkExpr e
-  return $ ExprStmt (fst ce)
+  return $ IExprS ce
 
 -- IfElse
 checkStmt (IfElse e1 s1 s2) = do
   ce <- checkExpr e1
   cs1 <- checkStmt s1
   cs2 <- checkStmt s2
-  return $ IfElse (fst ce) cs1 cs2
+  return $ IIfElse ce cs1 cs2
 
 -- While
 checkStmt (While e s) = do
   ce <- checkExpr e
   cs <- checkStmt s
-  return $ While (fst ce) cs
+  return $ IWhile ce cs
 
 -- Return
 checkStmt (Return e) = do
   case e of
-    Nothing -> return $ Return Nothing
+    Nothing -> return $ IReturn Nothing
     Just x  -> do
                 ce <- checkExpr x
-                return $ Return $ Just (fst ce)
+                return $ IReturn $ Just ce
 
 -- Print
 checkStmt (Print e) = do
   ce <- checkExpr e
   case snd ce of
-    CInt -> return $ Print e
+    CInt -> return $ IPrint ce
     _    -> throwError $ TError ("Only int print's allowed at the moment")
 
 -- Null
-checkStmt Null = return Null
+checkStmt Null = return INull
 
 ------------------------------------------------------------
 -- Declarations
 ------------------------------------------------------------
 
-checkDecl :: Decl -> Checker Decl
+checkDecl :: Decl -> Checker IDecl
 checkDecl (Decl CVoid _)  = throwError $ SError "Void cannot have an identifier"
-checkDecl d@(Decl a@(Array c tpe) id) = do
+checkDecl (Decl a@(Array c tpe) id) = do
   case tpe of
     CVoid -> throwError $ TError "Declared array of voids"
     _     -> do
@@ -160,70 +167,70 @@ checkDecl d@(Decl a@(Array c tpe) id) = do
               case getId id env of
                 Nothing -> addId a id
                 Just x  -> throwError $ TError (dError id)
-              return d
+              return $ IDecl a id
  
-checkDecl d@(Decl tpe id) = do
+checkDecl (Decl tpe id) = do
   env <- get
   case getId id env of
     Nothing -> addId tpe id
     Just x  -> throwError $ TError (dError id)
-  return d
+  return $ IDecl tpe id
 
 ------------------------------------------------------------
 -- Expressions
 ------------------------------------------------------------
 
 -- Variable
-checkExpr :: Expr -> Checker (Expr, Type)
-checkExpr e@(Var id) = do
+checkExpr :: Expr -> Checker IExpr
+checkExpr (Var id) = do
   env <- get
   case getDeclaredId id env of
     Nothing -> throwError $ TError (dError id)
-    Just x  -> return (e, x)
+    Just x  -> return $ (IVar id, x)
 
 -- Array variables
-checkExpr e@(VarArr id inx) = do
+checkExpr (VarArr id inx) = do
   env <- get
   case getDeclaredId id env of
     Nothing -> throwError $ TError (dError id)
     Just x  -> case x of
-                Array c tpe -> return (e, x)
+                Array c tpe -> return (IVarA id inx, x)
                 _           -> throwError $ TError "Can only access index of an array"
 
 -- Constants
-checkExpr e@(IntConst i)  = return (e, CInt)
-checkExpr e@(CharConst c) = return (e, CChar)
+checkExpr (IntConst i)  = return (IIConst i, CInt)
+checkExpr (CharConst c) = return (ICConst c, CChar)
 
 -- BinOps
-checkExpr e@(BinOp op e1 e2) = do
+checkExpr (BinOp op e1 e2) = do
   ce1 <- checkExpr e1
   ce2 <- checkExpr e2
   tpe <- comp (snd ce1) (snd ce2)
   case tpe of
     -- Change type of BinOp if needed so
     -- we know when coercions are needed
-    CInt -> return (e, tpe)
+    CInt -> return (IBinOp op ce1 ce2, tpe)
     _    -> throwError $ SError "Only Int BinOps supported"
 
 -- Assignment
-checkExpr e@(Assign id expr) = do
+checkExpr (Assign id expr) = do
   env <- get
   case getDeclaredId id env of
     Nothing -> throwError $ TError ("Var not declared: " ++ id)
     Just x  -> do
       ce <- checkExpr expr
       tpe <- comp x (snd ce)
-      return (e, tpe)
+      return (IAssign id ce, tpe)
 
 -- Function calls
-checkExpr e@(FCall id args) = do
+checkExpr (FCall id args) = do
   env <- get
   as <- mapM checkExpr args
   case Map.lookup id (funcs env) of
     Nothing -> throwError $ TError ("Function: " ++ id ++ " not declared")
     Just x  -> do
                 fparams (snd x) (fmap snd as)
-                return (e, fst x)
+                return (IFCall id as, fst x)
 
 -- Check function call parameters
 fparams :: [Param] -> [Type] -> Checker ()

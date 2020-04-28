@@ -2,7 +2,6 @@
 
 module Main where
 
-import AST
 import Checker
 import LLVMGen
 
@@ -47,8 +46,8 @@ compileProg fn = do
                   --pPrint res
                   case runChecker res of
                     (Left err, _)  -> putStrLn $ show err
-                    (Right _, st) -> do
-                                      let ast = runGen fn res
+                    (Right cres, st) -> do
+                                      let ast = runGen fn cres
                                       --putStrLn $ L.unpack $ ppllvm $ ast
                                       toLLVM "minic" ast
 
@@ -72,8 +71,8 @@ repl = do
                           outputStrLn $ show res
                           case runChecker res of
                             (Left  err, _) -> do {outputStrLn $ show err; loop}
-                            (Right _, st) -> do
-                              let ast = runGen "repl" res
+                            (Right cres, st) -> do
+                              let ast = runGen "repl" cres
                               outputStrLn $ L.unpack $ ppllvm ast
                               loop
 

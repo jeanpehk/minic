@@ -5,7 +5,8 @@
 
 module LLVMGen where
 
-import qualified AST as Mc
+import AST (Op (..), Type (..))
+import qualified IAST as Mc
 import LLVMEnv
 
 import Data.Char
@@ -17,11 +18,11 @@ import Control.Monad.State
 import qualified Data.Map as Map
 
 import LLVM.Pretty
-import qualified LLVM.AST as AST
-import qualified LLVM.AST.Type as AST
-import qualified LLVM.AST.IntegerPredicate as AST
-import qualified LLVM.AST.Name as AST
-import qualified LLVM.AST.Constant as AST
+import qualified LLVM.AST as LLVM
+import qualified LLVM.AST.Type as LLVM
+import qualified LLVM.AST.IntegerPredicate as LLVM
+import qualified LLVM.AST.Name as LLVM
+import qualified LLVM.AST.Constant as LLVM
 import qualified LLVM.IRBuilder.Constant as IR
 import qualified LLVM.IRBuilder.Instruction as IR
 import qualified LLVM.IRBuilder.Module as IR
@@ -33,7 +34,7 @@ import qualified LLVM.IRBuilder.Monad as IR
 -- LLVM AST Generation
 ------------------------------------------------------------
 
-runGen :: String -> Mc.TUnit -> AST.Module
+runGen :: String -> Mc.ITUnit -> LLVM.Module
 runGen nm tunit = fst $ runState (IR.buildModuleT (fromString nm) (codeGen tunit)) env
   where
     env = Env { active = ST Map.empty, rest = []
@@ -45,13 +46,13 @@ runGen nm tunit = fst $ runState (IR.buildModuleT (fromString nm) (codeGen tunit
 -- Translation units
 ------------------------------------------------------------
 
-codeGen :: Mc.TUnit -> LLVMGen ()
-codeGen (Mc.TUnit tls) = do
-  prnt <- IR.extern (AST.mkName "print") [AST.i32] AST.void
+codeGen :: Mc.ITUnit -> LLVMGen ()
+codeGen (Mc.ITUnit tls) = do
+  prnt <- IR.extern (LLVM.mkName "print") [LLVM.i32] LLVM.void
   addExtern prnt
   let x = \y -> case y of
-                  (Mc.GDecl decl) -> genGlobalDecl decl
-                  (Mc.FDef func)  -> genFunc func
+                  (Mc.IGlobal decl) -> genGlobalDecl decl
+                  (Mc.IFDef func)  -> genFunc func
   mapM_ x tls
 
 ------------------------------------------------------------
@@ -59,24 +60,24 @@ codeGen (Mc.TUnit tls) = do
 ------------------------------------------------------------
 
 genGlobalDecl :: (MonadState Env m, IR.MonadModuleBuilder m)
-              => Mc.Decl
+              => Mc.IDecl
               -> m ()
-genGlobalDecl (Mc.Decl Mc.CVoid id) = error "Can't have void decl with id"
-genGlobalDecl (Mc.Decl tpe id) = do
-  d <- IR.global (AST.mkName id) (decideType tpe) (AST.Int (fromIntegral 32) 0)
+genGlobalDecl (Mc.IDecl CVoid id) = error "Can't have void decl with id"
+genGlobalDecl (Mc.IDecl tpe id) = do
+  d <- IR.global (LLVM.mkName id) (decideType tpe) (LLVM.Int (fromIntegral 32) 0)
   addToActive id d
   return ()
 
 genDecl :: (MonadState Env m, IR.MonadModuleBuilder m, IR.MonadIRBuilder m)
-        => Mc.Decl
+        => Mc.IDecl
         -> m ()
-genDecl (Mc.Decl tpe id) = do
+genDecl (Mc.IDecl tpe id) = do
   d <- case tpe of
-    Mc.CInt           -> IR.alloca AST.i32 Nothing 4
-    Mc.CChar          -> IR.alloca AST.i8 Nothing 1
-    Mc.CVoid          -> error "Can't have void decl with id"
-    pn@(Mc.Pntr p)    -> IR.alloca (decideType pn) Nothing 8
-    ar@(Mc.Array c t) -> IR.alloca (decideType ar) Nothing 16
+    CInt           -> IR.alloca LLVM.i32 Nothing 4
+    CChar          -> IR.alloca LLVM.i8 Nothing 1
+    CVoid          -> error "Can't have void decl with id"
+    pn@(Pntr p)    -> IR.alloca (decideType pn) Nothing 8
+    ar@(Array c t) -> IR.alloca (decideType ar) Nothing 16
   addToActive id d
   return ()
 
@@ -85,15 +86,15 @@ genDecl (Mc.Decl tpe id) = do
 ------------------------------------------------------------
 
 genFunc :: (MonadState Env m, IR.MonadModuleBuilder m, MonadFix m)
-        => Mc.Func
+        => Mc.IFunc
         -> m ()
-genFunc (Mc.Func tpe id params block) = mdo
+genFunc (Mc.IFunc tpe id params block) = mdo
   let ps = map mkParam params
 
   -- Insert function to env using mdo to allow
   -- recursive calls
   addFunc id f
-  f <- IR.function (AST.mkName id) ps (decideType tpe) $ \ops -> do
+  f <- IR.function (LLVM.mkName id) ps (decideType tpe) $ \ops -> do
 
     newActive
     -- Add params to symboltable
@@ -107,7 +108,7 @@ genFunc (Mc.Func tpe id params block) = mdo
                     Left decl  -> genDecl decl
                     Right stmt -> genStmt stmt
 
-    mapM_ f $ Mc.getBlock block
+    mapM_ f $ Mc.getIBlock block
 
     -- Check whether return stmt is already generated
     envAfter <- get
@@ -123,24 +124,24 @@ genFunc (Mc.Func tpe id params block) = mdo
 
 -- Block statements
 genStmt :: (MonadState Env m, IR.MonadModuleBuilder m, IR.MonadIRBuilder m, MonadFix m)
-        => Mc.Stmt
+        => Mc.IStmt
         -> m ()
-genStmt (Mc.BlockStmt bl) = do
+genStmt (Mc.IBlockS bl) = do
   newActive
   let f = \y -> case y of
                   Left decl  -> genDecl decl
                   Right stmt -> genStmt stmt
-  mapM_ f $ Mc.getBlock bl
+  mapM_ f $ Mc.getIBlock bl
   dropActive
   return ()
 
 -- Expr statements
-genStmt (Mc.ExprStmt expr) = do
+genStmt (Mc.IExprS expr) = do
   genExpr expr
   return ()
 
 -- If Else statements
-genStmt (Mc.IfElse expr stmt1 stmt2) = mdo
+genStmt (Mc.IIfElse expr stmt1 stmt2) = mdo
   e <- genExpr expr
   IR.condBr e thn els
 
@@ -157,7 +158,7 @@ genStmt (Mc.IfElse expr stmt1 stmt2) = mdo
   return ()
 
 -- While statements
-genStmt (Mc.While expr stmt) = mdo
+genStmt (Mc.IWhile expr stmt) = mdo
   -- Starting block with comparison
   IR.br bl
   bl <- IR.block
@@ -174,7 +175,7 @@ genStmt (Mc.While expr stmt) = mdo
   return ()
 
 -- Return statements
-genStmt (Mc.Return x) = do
+genStmt (Mc.IReturn x) = do
   modify $ \env -> env { funcHasRet = True }
   case x of
     Nothing -> do
@@ -184,7 +185,7 @@ genStmt (Mc.Return x) = do
                 IR.ret e
 
 -- Print statements
-genStmt (Mc.Print expr) = do
+genStmt (Mc.IPrint expr) = do
   e <- genExpr expr
   env <- get
   let op = getPrint env
@@ -192,7 +193,7 @@ genStmt (Mc.Print expr) = do
   return ()
 
 -- Null statements
-genStmt (Mc.Null) = return ()
+genStmt (Mc.INull) = return ()
 
 ------------------------------------------------------------
 -- Expressions
@@ -200,37 +201,37 @@ genStmt (Mc.Null) = return ()
 
 -- Variables
 genExpr :: (MonadState Env m, IR.MonadModuleBuilder m, IR.MonadIRBuilder m)
-        => Mc.Expr
-        -> m AST.Operand
-genExpr (Mc.Var id) = do
+        => Mc.IExpr
+        -> m LLVM.Operand
+genExpr ((Mc.IVar id), tpe) = do
   env <- get
   let op = idFromEnv id env
   IR.load op 8
 
 -- Array variables
---genExpr (Mc.VarArr id inx) = do
+--genExpr (Mc.IVarA id inx) = do
 
 -- Int Constants
-genExpr (Mc.IntConst int) = return $ constInt32 int
+genExpr ((Mc.IIConst int), _) = return $ constInt32 int
 
 -- Char Constants
-genExpr (Mc.CharConst char) = return $ IR.int8 $ toInteger $ ord char
+genExpr ((Mc.ICConst char), _) = return $ IR.int8 $ toInteger $ ord char
 
 -- BinOps
-genExpr (Mc.BinOp op e ee) = do
+genExpr ((Mc.IBinOp op e ee), tpe) = do
   e1 <- genExpr e
   e2 <- genExpr ee
   case op of
-    Mc.Add   -> IR.add e1 e2
-    Mc.Subtr -> IR.sub e1 e2
-    Mc.Mul   -> IR.mul e1 e2
-    Mc.Div   -> IR.sdiv e1 e2
-    Mc.Lt    -> IR.icmp AST.SLT e1 e2
-    Mc.Gt    -> IR.icmp AST.SGT e1 e2
-    Mc.Eq    -> IR.icmp AST.EQ e1 e2
+    Add   -> IR.add e1 e2
+    Subtr -> IR.sub e1 e2
+    Mul   -> IR.mul e1 e2
+    Div   -> IR.sdiv e1 e2
+    Lt    -> IR.icmp LLVM.SLT e1 e2
+    Gt    -> IR.icmp LLVM.SGT e1 e2
+    Eq    -> IR.icmp LLVM.EQ e1 e2
 
 -- Assignments
-genExpr (Mc.Assign id expr) = do
+genExpr ((Mc.IAssign id expr), _) = do
   env <- get
   let var = idFromEnv id env
   e <- genExpr expr
@@ -238,7 +239,7 @@ genExpr (Mc.Assign id expr) = do
   return var
 
 -- Function calls
-genExpr (Mc.FCall id args) = do
+genExpr ((Mc.IFCall id args), tpe) = do
   env <- get
   as <- mapM genExpr args
   let mkArgs = fmap (\y -> (y, [])) as
@@ -249,9 +250,9 @@ genExpr (Mc.FCall id args) = do
 ------------------------------------------------------------
 
 genParam :: (MonadState Env m, IR.MonadModuleBuilder m, IR.MonadIRBuilder m)
-        => (Mc.Param, AST.Operand)
-        -> m AST.Operand
-genParam ((Mc.Param _ id), (AST.LocalReference tpe nm)) = do
+        => (Mc.IParam, LLVM.Operand)
+        -> m LLVM.Operand
+genParam ((Mc.IParam _ id), (LLVM.LocalReference tpe nm)) = do
   env <- get
   let op = idFromEnv id env
   addr <- IR.alloca tpe Nothing 8

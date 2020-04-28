@@ -16,7 +16,10 @@ data TL
 
 -- Function
 data Func
-  = Func Type Id [Param] Block
+  = Func { getFT :: Type
+         , getFId ::  Id
+         , getFP :: [Param]
+         , getFB ::  Block }
   deriving (Eq, Show)
 
 -- Program block, i.e a compound statement
