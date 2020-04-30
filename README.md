@@ -13,7 +13,7 @@ can be of use to someone trying to write a compiler using the modern Haskell LLV
 
 Current features of the compiler include:
 
-* Functions (no forward declarations)
+* Functions
 * Parameters, return statements
 * Recursion
 * Command line arguments for main function
@@ -23,6 +23,7 @@ Current features of the compiler include:
 * Globals
 * Variable declarations, assignments
 * Variable scopes
+* Arrays (one-dimensional assignments, multidimensional parsing and declarations)
 * boolean comparison operators: "<", ">", "=="
 * Arithmetic operators: +, -, \*, /
 * types: int, char, void
