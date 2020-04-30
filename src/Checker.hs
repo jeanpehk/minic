@@ -147,8 +147,14 @@ checkStmt (Return e) = do
 checkStmt (Print e) = do
   ce <- checkExpr e
   case snd ce of
-    CInt -> return $ IPrint ce
-    _    -> throwError $ TError ("Only int print's allowed at the moment")
+    CInt         -> return $ IPrint ce
+    Array _ t -> case arrayBase t of
+                  CInt -> return $ IPrint ce
+                  _    -> throwError $ TError ("Only int print's allowed at the moment"
+                                               ++ ", got: " ++ show t)
+
+    t            -> throwError $ TError ("Only int print's allowed at the moment"
+                                         ++ ", got: " ++ show t)
 
 -- Null
 checkStmt Null = return INull
@@ -185,14 +191,14 @@ checkExpr :: Expr -> Checker IExpr
 checkExpr (Var id) = do
   env <- get
   case getDeclaredId id env of
-    Nothing -> throwError $ TError (dError id)
+    Nothing -> throwError $ TError ("Variable " ++ id ++ " not declared")
     Just x  -> return $ (IVar id, x)
 
 -- Array variables
 checkExpr (VarArr id inx) = do
   env <- get
   case getDeclaredId id env of
-    Nothing -> throwError $ TError (dError id)
+    Nothing -> throwError $ TError ("Variable " ++ id ++ " not declared")
     Just x  -> case x of
                 Array c tpe -> return (IVarA id inx, x)
                 _           -> throwError $ TError "Can only access index of an array"
@@ -212,15 +218,31 @@ checkExpr (BinOp op e1 e2) = do
     CInt -> return (IBinOp op ce1 ce2, tpe)
     _    -> throwError $ SError "Only Int BinOps supported"
 
--- Assignment
-checkExpr (Assign id expr) = do
+-- Assignments
+checkExpr (Assign (Var id) expr) = do
   env <- get
   case getDeclaredId id env of
-    Nothing -> throwError $ TError ("Var not declared: " ++ id)
-    Just x  -> do
+    Nothing           -> throwError $ TError ("Var not declared: " ++ id)
+    Just (Array l t)  -> do
       ce <- checkExpr expr
-      tpe <- comp x (snd ce)
-      return (IAssign id ce, tpe)
+      tpe <- compA t (snd ce)
+      return (IAssign (IId id) ce, tpe)
+    Just x            -> do
+      ce <- checkExpr expr
+      tpe <- compA x (snd ce)
+      return (IAssign (IId id) ce, tpe)
+
+checkExpr (Assign (VarArr id inx) expr) = do
+  env <- get
+  case getDeclaredId id env of
+    Nothing           -> throwError $ TError ("Var not declared: " ++ id)
+    Just (Array l t)  -> do
+      ce <- checkExpr expr
+      tpe <- compA t (snd ce) 
+      return (IAssign (IAId id inx) ce, tpe)
+    _                 -> throwError $ SError "Only lvalues allowed in assignments"
+
+checkExpr (Assign _ _) = throwError $ TError "Lvalue of assignment not correct"
 
 -- Function calls
 checkExpr (FCall id args) = do
@@ -246,17 +268,30 @@ fparams [] [] = return ()
 ------------------------------------------------------------
 
 comp :: Type -> Type -> Checker Type
-comp (CInt) (CInt) = return $ CInt
-comp (CChar) (CChar) = return $ CInt
-comp (CChar) (CInt) = return $ CInt
-comp (CInt) (CChar) = return $ CInt
+comp (CInt) (CInt) = return CInt
+comp (CChar) (CChar) = return CInt
+comp (CChar) (CInt) = return CInt
+comp (CInt) (CChar) = return CInt
 comp (Pntr a) (Pntr b) = do
   r <- comp a b
   return $ Pntr r
-comp (Array c1 t1) _ = throwError $ TError "Cannot combine arrays"
 comp _ (Array c1 t1) = throwError $ TError "Cannot combine arrays"
+comp (Array c1 t1) _ = throwError $ TError "Cannot combine arrays"
 comp _ (Pntr _) = throwError $ TError "Cannot combine ptr with non ptr"
 comp (Pntr _) _ = throwError $ TError "Cannot combine ptr with non ptr"
 comp (CVoid) _ = throwError $ TError "Cannot combine Void with another type"
 comp _ (CVoid) = throwError $ TError "Cannot combine Void with another type"
+
+------------------------------------------------------------
+-- Type comparisons for assignments
+------------------------------------------------------------
+
+compA :: Type -> Type -> Checker Type
+compA t1 (Array _ t2) = compA t1 t2
+compA (Array _ t1) t2 = compA t1 t2
+compA t1 t2 = do
+  case (t1, t2) of
+    (CInt, CInt) -> return CInt
+    (t, tt)    -> throwError $ TError ("Cannot combine " ++ show t ++ " and "
+                                       ++ show tt ++ " in an assignment")
 

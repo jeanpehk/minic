@@ -102,8 +102,7 @@ param = try $ Param <$> tpe <*> identifier
 -- expr : id '=' arithExpr
 --      | arithExpr
 expr :: Parser Expr
-expr = Assign <$> lvalue <*> expr
-    <|> exprArith
+expr = exprArith
 
 -- Parses an arithmetic expression using Megaparsec's `makeExprParser`
 exprArith :: Parser Expr
@@ -113,13 +112,15 @@ exprArith = makeExprParser term operatorTable
 term :: Parser Expr
 term = parens expr
     <|> try fcall
-    <|> do
-          variable
+    <|> variable
     <|> constant
 
--- Helper to write binops for op table
+-- Helpers to write binops for op table
 binary :: String -> (Expr -> Expr -> Expr) -> Operator Parser Expr
 binary op f = InfixL $ f <$ symbol op
+
+binaryR :: String -> (Expr -> Expr -> Expr) -> Operator Parser Expr
+binaryR op f = InfixR $ f <$ symbol op
 
 -- Operator table
 -- Every inner list is a level of precedence that contains
@@ -134,12 +135,9 @@ operatorTable =
     , binary "-" (BinOp Subtr)],
     [ binary "<" (BinOp Lt)
     , binary ">" (BinOp Gt)],
-    [binary "==" (BinOp Eq)]
+    [ binary "==" (BinOp Eq)],
+    [ binaryR "=" Assign]
   ]
-
--- Parses an lvalue for assignment expressions
-lvalue :: Parser Id
-lvalue = (lexeme . try) (identifier <* (char '=') <* notFollowedBy (char '='))
 
 -- Parses a single statement
 -- stmt : block
@@ -241,7 +239,7 @@ pureTpe =
 
 -- Parses a single variable
 variable :: Parser Expr
-variable = try (VarArr <$> identifier <*> squares int)
+variable = try (VarArr <$> identifier <*> (some (squares int)))
         <|> Var <$> identifier
 
 -- character constant, e.g 'k'

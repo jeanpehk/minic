@@ -77,7 +77,7 @@ genDecl (Mc.IDecl tpe id) = do
     CChar          -> IR.alloca LLVM.i8 Nothing 1
     CVoid          -> error "Can't have void decl with id"
     pn@(Pntr p)    -> IR.alloca (decideType pn) Nothing 8
-    ar@(Array c t) -> IR.alloca (decideType ar) Nothing 16
+    ar@(Array c t) -> IR.alloca (decideType ar) Nothing 8
   addToActive id d
   return ()
 
@@ -209,7 +209,12 @@ genExpr ((Mc.IVar id), tpe) = do
   IR.load op 8
 
 -- Array variables
---genExpr (Mc.IVarA id inx) = do
+genExpr ((Mc.IVarA id inx), tpe) = do
+  env <- get
+  let op = idFromEnv id env
+  let indexes = map (IR.int32 . fromIntegral) inx
+  p <- IR.gep op ([IR.int32 0] ++ indexes)
+  IR.load p 8
 
 -- Int Constants
 genExpr ((Mc.IIConst int), _) = return $ constInt32 int
@@ -231,12 +236,21 @@ genExpr ((Mc.IBinOp op e ee), tpe) = do
     Eq    -> IR.icmp LLVM.EQ e1 e2
 
 -- Assignments
-genExpr ((Mc.IAssign id expr), _) = do
+genExpr ((Mc.IAssign (Mc.IId id) expr), _) = do
   env <- get
   let var = idFromEnv id env
   e <- genExpr expr
   IR.store var 8 e
   return var
+
+genExpr ((Mc.IAssign (Mc.IAId id inx) expr), _) = do
+  env <- get
+  let op = idFromEnv id env
+  let indexes = map (IR.int32 . fromIntegral) inx
+  e <- genExpr expr
+  p <- IR.gep op ([IR.int32 0] ++ indexes)
+  IR.store p 8 e
+  return p
 
 -- Function calls
 genExpr ((Mc.IFCall id args), tpe) = do

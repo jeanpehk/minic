@@ -89,3 +89,8 @@ addFunc :: Type -> [Param] -> Id -> Checker ()
 addFunc tpe ps id = modify $ \env ->
   env { funcs = Map.insert id (tpe, ps) (funcs env) }
 
+arrayBase :: Type -> Type
+arrayBase t = case t of
+  Array _ x -> arrayBase x
+  baset      -> baset
+

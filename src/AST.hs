@@ -48,11 +48,11 @@ data Stmt
 
 data Expr
   = Var Id
-  | VarArr Id Int -- Array variables
+  | VarArr Id [Int] -- Array variables
   | IntConst Int
   | CharConst Char
   | BinOp Op Expr Expr
-  | Assign Id Expr
+  | Assign Expr Expr
   | FCall Id [Expr]
   deriving (Eq, Show)
 

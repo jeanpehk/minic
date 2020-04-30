@@ -43,12 +43,18 @@ type IExpr = (IExpr', Type)
 
 data IExpr'
   = IVar Id
-  | IVarA Id Index -- Array variables
+  | IVarA Id [Index] -- Array variables
   | IIConst Int
   | ICConst Char
   | IBinOp Op IExpr IExpr
-  | IAssign Id IExpr
+  | IAssign Lvalue IExpr
   | IFCall Id [IExpr]
+  deriving (Eq, Show)
+
+-- Lvalues for expressions
+data Lvalue
+  = IId Id         -- Just an identifier
+  | IAId Id [Index]  -- Index of an array
   deriving (Eq, Show)
 
 type Index = Int
