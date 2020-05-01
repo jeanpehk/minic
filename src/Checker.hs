@@ -86,6 +86,7 @@ checkVoids [(ParamNoId CVoid)] = return []
 checkVoids xs = case (ParamNoId CVoid) `elem` xs of
                   False -> return $ map (\y -> IParam (getType y) (getPID y)) xs
                   True  -> throwError $ TError "Void must be the only param"
+
 ------------------------------------------------------------
 -- Block
 ------------------------------------------------------------
@@ -147,14 +148,13 @@ checkStmt (Return e) = do
 checkStmt (Print e) = do
   ce <- checkExpr e
   case snd ce of
-    CInt         -> return $ IPrint ce
+    CInt      -> return $ IPrint ce
     Array _ t -> case arrayBase t of
-                  CInt -> return $ IPrint ce
-                  _    -> throwError $ TError ("Only int print's allowed at the moment"
-                                               ++ ", got: " ++ show t)
-
-    t            -> throwError $ TError ("Only int print's allowed at the moment"
-                                         ++ ", got: " ++ show t)
+                   CInt -> return $ IPrint ce
+                   _    -> throwError $ TError ("Only int print's allowed at the moment"
+                                                ++ ", got: " ++ show t)
+    t         -> throwError $ TError ("Only int print's allowed at the moment"
+                                      ++ ", got: " ++ show t)
 
 -- Null
 checkStmt Null = return INull
@@ -200,8 +200,8 @@ checkExpr (VarArr id inx) = do
   case getDeclaredId id env of
     Nothing -> throwError $ TError ("Variable " ++ id ++ " not declared")
     Just x  -> case x of
-                Array c tpe -> return (IVarA id inx, x)
-                _           -> throwError $ TError "Can only access index of an array"
+                Array c t -> return (IVarA id inx, x)
+                _         -> throwError $ TError "Can only access index of an array"
 
 -- Constants
 checkExpr (IntConst i)  = return (IIConst i, CInt)
@@ -224,20 +224,21 @@ checkExpr (Assign (Var id) expr) = do
   case getDeclaredId id env of
     Nothing           -> throwError $ TError ("Var not declared: " ++ id)
     Just (Array l t)  -> do
-      ce <- checkExpr expr
+      ce  <- checkExpr expr
       tpe <- compA t (snd ce)
       return (IAssign (IId id) ce, tpe)
     Just x            -> do
-      ce <- checkExpr expr
+      ce  <- checkExpr expr
       tpe <- compA x (snd ce)
       return (IAssign (IId id) ce, tpe)
 
+-- Array assignments
 checkExpr (Assign (VarArr id inx) expr) = do
   env <- get
   case getDeclaredId id env of
     Nothing           -> throwError $ TError ("Var not declared: " ++ id)
     Just (Array l t)  -> do
-      ce <- checkExpr expr
+      ce  <- checkExpr expr
       tpe <- compA t (snd ce) 
       return (IAssign (IAId id inx) ce, tpe)
     _                 -> throwError $ SError "Only lvalues allowed in assignments"
@@ -292,6 +293,6 @@ compA (Array _ t1) t2 = compA t1 t2
 compA t1 t2 = do
   case (t1, t2) of
     (CInt, CInt) -> return CInt
-    (t, tt)    -> throwError $ TError ("Cannot combine " ++ show t ++ " and "
-                                       ++ show tt ++ " in an assignment")
+    (t, tt)      -> throwError $ TError ("Cannot combine " ++ show t ++ " and "
+                                         ++ show tt ++ " in an assignment")
 

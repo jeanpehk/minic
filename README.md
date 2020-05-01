@@ -6,8 +6,7 @@ and [llvm-hs](https://github.com/llvm-hs/llvm-hs) for code generation.
 ## Goals
 
 This compiler was written for a university compiler construction course and
-as a learning experiment. The compiler is written in a fairly straightforward way and
-can be of use to someone trying to write a compiler using the modern Haskell LLVM bindings.
+as a learning experiment.
 
 ## Features
 
@@ -32,7 +31,7 @@ Current features of the compiler include:
 
 ## Building
 
-You will need llvm installed. For installation instructions check e.g:
+You will need llvm installed. For installation instructions check e.g.:
 <https://github.com/llvm-hs/llvm-hs/blob/llvm-9/README.md#installing-llvm>.
 
 There is no linker included so you will need e.g. gcc to link object files.
@@ -55,7 +54,7 @@ $ stack test
 ```bash
 $ stack exec minic-exe /path/to/file
 ```
-2. Link and compile the generated object file with e.g gcc:
+2. Link and compile the generated object file with e.g. gcc:
 ```bash
 $ gcc runtime.c minic
 ```
@@ -71,12 +70,11 @@ $ stack exec minic-exe
 
 ## Examples
 
-Example files to compile can be found in the examples folder. Files ending with .c are valid C programs,
-files ending with .mc are not valid C as they contain non-c print statements.
+Example files of the compilers functionality can be found in the examples folder.
 
 ## Print statements
 
-Prints expressions that eval to ints.
+Prints expressions that eval to ints. Are not actual C functions.
 
 grammar: 'print' '(' expr ')'
 

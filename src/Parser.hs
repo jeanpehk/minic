@@ -251,7 +251,6 @@ constant :: Parser Expr
 constant = IntConst <$> int
         <|> CharConst <$> charConst
 
-
 -- Parses a starting character of an identifier
 idStart :: Parser Char
 idStart = lowerChar

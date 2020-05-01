@@ -95,7 +95,6 @@ genFunc (Mc.IFunc tpe id params block) = mdo
   -- recursive calls
   addFunc id f
   f <- IR.function (LLVM.mkName id) ps (decideType tpe) $ \ops -> do
-
     newActive
     -- Add params to symboltable
     paramsToEnv params ops
@@ -113,7 +112,15 @@ genFunc (Mc.IFunc tpe id params block) = mdo
     -- Check whether return stmt is already generated
     envAfter <- get
     case funcHasRet envAfter of
-      False -> IR.ret $ IR.int32 0
+      False -> case tpe of
+                 CVoid          -> IR.retVoid
+                 CInt           -> IR.ret $ IR.int32 0
+                 CChar          -> IR.ret $ IR.int8 0
+                 pn@(Pntr p)    -> do
+                                     p <- IR.alloca (decideType pn) Nothing 8
+                                     l <- IR.load p 8
+                                     IR.ret l
+                 ar@(Array c t) -> error $ "Internal error: array as ret type"
       True  -> modify $ \e -> e { funcHasRet = False }
   dropActive
   return ()
@@ -178,8 +185,7 @@ genStmt (Mc.IWhile expr stmt) = mdo
 genStmt (Mc.IReturn x) = do
   modify $ \env -> env { funcHasRet = True }
   case x of
-    Nothing -> do
-                IR.retVoid
+    Nothing -> IR.retVoid
     Just x  -> do
                 e <- genExpr x
                 IR.ret e
@@ -209,6 +215,7 @@ genExpr ((Mc.IVar id), tpe) = do
   IR.load op 8
 
 -- Array variables
+-- TODO generation for multidimensional arrays
 genExpr ((Mc.IVarA id inx), tpe) = do
   env <- get
   let op = idFromEnv id env
