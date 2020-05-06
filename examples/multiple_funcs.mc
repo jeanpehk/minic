@@ -14,5 +14,6 @@ int main(int argc, char**argv) {
   ok();
   a = notok();
   print(a);
+  return 0;
 }
 

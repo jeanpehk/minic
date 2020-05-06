@@ -16,4 +16,5 @@ int main() {
       a = 3;
       print(a);
     }
+  return 0;
 }

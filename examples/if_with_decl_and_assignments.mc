@@ -22,4 +22,5 @@ int main() {
   }
   print(b);
 
+  return 0;
 }

@@ -1,0 +1,16 @@
+int fib(int a, int b) {
+  print(a);
+  if (a < 100) {
+    fib(b,a+b);
+  }
+  else {
+    
+  }
+  return a;
+}
+
+int main() {
+  // TC should catch
+  fib('x',1);
+}
+

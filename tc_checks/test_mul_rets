@@ -1,0 +1,11 @@
+int ok() {
+  return 1;
+  return 2;
+  // TC should catch
+  return 'e';
+}
+
+int main() {
+  ok();
+  return 0;
+}

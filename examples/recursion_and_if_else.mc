@@ -15,5 +15,6 @@ int rec(int a) {
 
 int main() {
   rec(5);
+  return 0;
 }
 

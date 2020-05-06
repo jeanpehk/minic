@@ -14,7 +14,7 @@ import Test.Hspec.Megaparsec
 checkRes x = fst $ runChecker x
 exprTest x = fst $ (runState . runExceptT) (checkExpr x) env
 
-env = Env { active = ST Map.empty, blocks = [], funcs = Map.empty, used = []}
+env = Env { active = ST Map.empty, blocks = [], funcRet = Nothing, funcHasRet = False, funcs = Map.empty, used = []}
 
 spec :: Spec
 spec = do
@@ -129,6 +129,6 @@ spec = do
 
     describe "Binops" $ do
       describe "Mul" $
-        it "int and char are ok" $
-          exprTest (BinOp Mul (IntConst 5) (CharConst 'a')) `shouldBe` Right ((IBinOp Mul (IIConst 5, CInt) (ICConst 'a', CChar)), CInt)
+        it "int and char fail" $
+          exprTest (BinOp Mul (IntConst 5) (CharConst 'a')) `shouldBe` Left (TError "Cannot combine Int and Char")
 

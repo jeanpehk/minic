@@ -1,0 +1,4 @@
+int main() {
+  // TC should catch
+  return;
+}

@@ -24,6 +24,8 @@ data SymbolTable = ST { getSt :: Map.Map Id Type }
 
 data Env = Env { active :: SymbolTable
                , blocks :: [SymbolTable]
+               , funcRet :: Maybe Type -- Return type of current function
+               , funcHasRet :: Bool    -- Did last function have a return stmt
                , funcs  :: Map.Map Id (Type, [Param])
                , used   :: [SymbolTable] }
   deriving (Eq, Show)
@@ -87,7 +89,7 @@ addId tpe id = modify $ \env ->
 
 addFunc :: Type -> [Param] -> Id -> Checker ()
 addFunc tpe ps id = modify $ \env ->
-  env { funcs = Map.insert id (tpe, ps) (funcs env) }
+  env { funcRet = Just tpe, funcs = Map.insert id (tpe, ps) (funcs env) }
 
 arrayBase :: Type -> Type
 arrayBase t = case t of

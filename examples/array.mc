@@ -12,4 +12,5 @@ int main() {
   int b;
   b = a[1];
   print(b);
+  return 0;
 }

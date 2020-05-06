@@ -18,7 +18,9 @@ import qualified Data.Map as Map
 runChecker :: TUnit -> (Either Error ITUnit, Env)
 runChecker tunit = (runState . runExceptT) (checkTu tunit) env
   where
-    env = Env { active = ST Map.empty, blocks = [], funcs = Map.empty, used = [] }
+    env = Env { active = ST Map.empty, blocks = []
+              , funcRet = Nothing, funcHasRet = False
+              , funcs = Map.empty, used = [] }
 
 ------------------------------------------------------------
 -- Translation unit
@@ -64,7 +66,19 @@ checkTl (FDef (Func tpe id params block)) = mdo
                         return $ Right stmt
   bls <- mapM f (getBlock block)
   dropBlock
+  checkRet tpe
+  modify $ \env -> env {funcHasRet = False}
   return $ IFDef $ IFunc tpe id cps (IBlock bls)
+
+-- Check whether return statement was generated and whether it is correct
+checkRet :: Type -> Checker ()
+checkRet tpe = do
+  env <- get
+  case (funcHasRet env, tpe) of
+    (False, CVoid) -> return ()
+    (False, t)     -> throwError $ TError ("Function with type " ++ show tpe
+                                         ++ " needs a return statement")
+    (True, _)  -> return ()
 
 ------------------------------------------------------------
 -- Parameters
@@ -138,10 +152,23 @@ checkStmt (While e s) = do
 
 -- Return
 checkStmt (Return e) = do
-  case e of
-    Nothing -> return $ IReturn Nothing
-    Just x  -> do
+  env <- get
+  -- Type that is supposed to be returned
+  ret <- case funcRet env of
+           Nothing -> throwError $ TError ("Internal error, func should always have\
+                                           \a type")
+           Just t  -> return t
+  -- Check that function type and return type match
+  case (ret, e) of
+    (CVoid, Nothing) -> do
+                          modify $ \env -> env { funcHasRet = True}
+                          return $ IReturn Nothing
+    (rt, Nothing)    -> throwError $ TError ("Can't combine function type " ++ show rt
+                                             ++ " with void return statement")
+    (r, Just x) -> do
                 ce <- checkExpr x
+                comp r (snd ce)
+                modify $ \env -> env { funcHasRet = True}
                 return $ IReturn $ Just ce
 
 -- Print
@@ -270,9 +297,9 @@ fparams [] [] = return ()
 
 comp :: Type -> Type -> Checker Type
 comp (CInt) (CInt) = return CInt
-comp (CChar) (CChar) = return CInt
-comp (CChar) (CInt) = return CInt
-comp (CInt) (CChar) = return CInt
+comp (CChar) (CChar) = return CChar
+comp (CChar) (CInt) = throwError $ TError "Cannot combine Char and Int"
+comp (CInt) (CChar) = throwError $ TError "Cannot combine Int and Char"
 comp (Pntr a) (Pntr b) = do
   r <- comp a b
   return $ Pntr r
@@ -290,9 +317,5 @@ comp _ (CVoid) = throwError $ TError "Cannot combine Void with another type"
 compA :: Type -> Type -> Checker Type
 compA t1 (Array _ t2) = compA t1 t2
 compA (Array _ t1) t2 = compA t1 t2
-compA t1 t2 = do
-  case (t1, t2) of
-    (CInt, CInt) -> return CInt
-    (t, tt)      -> throwError $ TError ("Cannot combine " ++ show t ++ " and "
-                                         ++ show tt ++ " in an assignment")
+compA t1 t2 = comp t1 t2
 

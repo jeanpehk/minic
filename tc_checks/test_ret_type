@@ -1,0 +1,8 @@
+int ok() {
+  // TC should catch
+  return 'a';
+}
+
+int main() {
+  ok();
+}
