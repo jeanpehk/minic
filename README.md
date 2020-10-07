@@ -29,6 +29,8 @@ Current features of the compiler include:
 * pointer declarations
 * Simple non-c print statements for ints
 
++ a stricter typechecker that checks e.g. function return types and distinguishes chars and ints.
+
 ## Building
 
 You will need llvm installed. For installation instructions check e.g.:
