@@ -29,7 +29,7 @@ Current features of the compiler include:
 * pointer declarations
 * Simple non-c print statements for ints
 
-+ a stricter typechecker that checks e.g. function return types and distinguishes chars and ints.
+Also has stricter typechecker that checks e.g. function return types and distinguishes chars and ints.
 
 ## Building
 
