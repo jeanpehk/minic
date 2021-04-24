@@ -1,10 +1,10 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.31.2.
+-- This file has been generated from package.yaml by hpack version 0.33.0.
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: ca89d35e8838ea9bb40335e91d238a1c6b4414ce2cfb29e0c79e276bbd1375c7
+-- hash: 503c506bcdb47af09f18b0e5f8f6e5fd97d658e72fd399d011d6769a8d0822b4
 
 name:           minic
 version:        0.1.0.0
@@ -29,6 +29,7 @@ library
       AST
       Checker
       CheckerEnv
+      CompilerMonad
       IAST
       LLVMEnv
       LLVMGen
@@ -59,6 +60,7 @@ executable minic-exe
       AST
       Checker
       CheckerEnv
+      CompilerMonad
       IAST
       LLVMEnv
       LLVMGen
